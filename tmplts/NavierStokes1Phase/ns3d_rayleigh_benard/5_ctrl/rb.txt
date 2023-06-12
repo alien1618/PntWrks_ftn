@@ -1,0 +1,9 @@
+500     temprature scaling parameter
+
+1.0     sp%thot
+
+0.0     sp%tcold
+
+1.0     sp%pr prantel number
+
+20000.0  sp%ra rayleigh number

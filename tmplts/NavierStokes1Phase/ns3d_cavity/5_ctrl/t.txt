@@ -1,0 +1,11 @@
+0.0001   time step size
+
+10000      total time steps
+
+1         iterations
+
+0.0001    convergence tolerance
+
+1000       print frequency
+
+1         output data format (0 = txt, 1 = vtk)

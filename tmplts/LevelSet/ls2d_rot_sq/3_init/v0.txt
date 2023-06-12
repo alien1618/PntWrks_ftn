@@ -1,0 +1,18 @@
+4       pre-defined advective velocity 1 = cnst, 2 = vrtx, 3 = shearing, 4 = rotating
+
+0.1     advective velocity dampening parameter
+
+2.0     vx for phase 1
+
+2.0     vy for phase 1
+
+0.0     vz for phase 1
+
+0.0     vx for phase 2
+
+0.0     vy for phase 2
+
+0.0     vz for phase 2
+
+
+

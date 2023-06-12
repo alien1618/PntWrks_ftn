@@ -1,0 +1,3 @@
+3       pre-defined notmal velocity 1 = cnst, 2 = 4-branch, 3 = 6-branch
+
+0.1     scaling factor for vx for phase 1

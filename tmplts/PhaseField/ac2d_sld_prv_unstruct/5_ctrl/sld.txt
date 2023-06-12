@@ -1,0 +1,17 @@
+4.0     a_2 controls the number of primary branches
+
+0.018   delta the smaller it is the more dendrite splitting
+
+0.005    eps_4 directly related to the intrf thickness
+
+0.0     theta0 preferential growth angle
+
+1.0  tau0
+
+0.9     alpha smaller it is the smaller the solidification rate
+
+1.8    gamma (the higher it is the more non-constant the intrf thickness. smaller it is the more the surface tension)
+
+0       equilibrium temperature
+
+1     latent heat of fusion

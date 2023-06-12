@@ -1,0 +1,13 @@
+0       eulerian = 0, lagrangian = 1
+
+2000    pressure prmtr
+
+0.1     artficial viscosity parameter
+
+0       upwinding flag (0 = false, 1 = true)
+
+0       particle shifting
+
+0.1     particle shifting parameter
+
+0.0     particle shifting surface indicator

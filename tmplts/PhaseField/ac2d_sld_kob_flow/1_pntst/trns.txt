@@ -1,0 +1,7 @@
+6.0     geometry scale factor
+
+-3.0     x-translation
+
+-3.0     y-translation
+
+0.0     z-translation
