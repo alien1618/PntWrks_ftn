@@ -1,5 +1,0 @@
-0.4	base value
-
-0.02	noise dampening parameter
-
-

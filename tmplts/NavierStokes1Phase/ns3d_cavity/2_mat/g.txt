@@ -1,5 +1,0 @@
-0.0     gravity-x
-
-0.0    gravity-y
-
-0.0     gravity-z

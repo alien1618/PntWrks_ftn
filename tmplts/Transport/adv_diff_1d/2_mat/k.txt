@@ -1,1 +1,0 @@
-0.0     thermal diffusivity in phase 1
