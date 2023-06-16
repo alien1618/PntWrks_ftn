@@ -8,7 +8,7 @@ OBJDIR = ./obj
 
 #####################################################################
 OBJS =\
-         structs.o pntst.o eqslvrs.o krnl_cmn.o krnl_sph.o krnl_wls.o krnl_rbf.o krnl_mls.o krnl_krg.o krnl_gfd.o bc.o intrf.o trnsprt.o ns.o ns_cbs.o sdf.o prmtrs.o slv_trnsprt.o slv_trnsprt_ss.o slv_ch.o slv_ac.o slv_ls.o slv_ns_1phs.o slv_ns_2phs.o slv_ns_lgr.o slv_elst.o slv_intrp.o slv_sdf.o slv_stfn.o main.o
+         structs.o pntst.o eqslvrs.o krnl_cmn.o krnl_sph.o krnl_wls.o krnl_rbf.o krnl_mls.o krnl_krg.o krnl_gfd.o bc.o intrf.o trnsprt.o ns.o ns_cbs.o sdf.o prmtrs.o slv_cmn.o slv_trnsprt.o slv_trnsprt_ss.o slv_ch.o slv_ac.o slv_ls.o slv_ns_1phs.o slv_ns_2phs.o slv_ns_lgr.o slv_elst.o slv_intrp.o slv_sdf.o slv_stfn.o main.o
 
 #####################################################################
 
@@ -70,6 +70,9 @@ sdf.o        	       : $(SRCDIR)/sdf.f08
 prmtrs.o        	       : $(SRCDIR)/prmtrs.f08
 	$(F08) $(FFLAGS)  -c $(SRCDIR)/prmtrs.f08
 #####################################################################
+slv_cmn.o        	       : $(SLVRDIR)/slv_cmn.f08
+	$(F08) $(FFLAGS)  -c $(SLVRDIR)/slv_cmn.f08
+
 slv_trnsprt.o        	       : $(SLVRDIR)/slv_trnsprt.f08
 	$(F08) $(FFLAGS)  -c $(SLVRDIR)/slv_trnsprt.f08
 

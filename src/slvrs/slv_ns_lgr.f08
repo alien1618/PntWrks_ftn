@@ -267,6 +267,7 @@ subroutine slv_ns_lgr(ps, walls, mat, bcs, sp, vel0, phi0)
         call get_intrps_o2(pnts, totpnts, krnls)
         !call get_intrps_o2_v2(pnts, totpnts, krnls)
 
+        ! solve navier-stokes equations
         call slv_ns(vel, v, p, ro, pnts, totpnts, krnls, vel1, p1, &
         f, phi, mat%nu, mat%ro, mat%total, sp%segma, bcs, &
          sp%dt, sp%av, sp%p, .true.)

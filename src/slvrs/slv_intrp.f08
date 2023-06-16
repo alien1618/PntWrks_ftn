@@ -264,8 +264,9 @@ end subroutine get_f2
 
 subroutine run_sctr_reg() 
 !------------------------------------------------------------------------------------------
-! This subroutine performs solves the parabolic and level set equations on randomly
-! scattered points in the domain. 
+! For a set of randomly scattered points within a domain boundary, this subroutine
+! iteratively regularizes the distribution of the points by performing particle
+! shifting operations.
 !------------------------------------------------------------------------------------------
     use pntst_struct
     !use bc_struct

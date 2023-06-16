@@ -51,8 +51,8 @@ subroutine run_ac ()
     call set_t(sp)
     !running the solver
     start = omp_get_wtime()
-    !call slv_ac_singleseed_2d(ps, sp, mat, bcs, u, phi, v)
-    call slv_ac_singleseed_2d_prv(ps, sp, mat, bcs, u, phi, v)
+    call slv_ac_singleseed_2d(ps, sp, mat, bcs, u, phi, v)
+    !call slv_ac_singleseed_2d_prv(ps, sp, mat, bcs, u, phi, v)
     finish = omp_get_wtime()
     print '("Time = ",f8.1," seconds.")',finish-start
 end subroutine run_ac
@@ -66,10 +66,7 @@ subroutine slv_ac_singleseed_2d(ps, sp, mat, bcs, u, phi, vel0)
     use bc_struct
     use krnl_cmn
     use krnl_sph
-    use krnl_rbf
-    use krnl_wls
-    use krnl_mls
-    use krnl_krg
+    use slvr_cmn
     use intrf
     use pntst
     use bndry
@@ -88,11 +85,7 @@ subroutine slv_ac_singleseed_2d(ps, sp, mat, bcs, u, phi, vel0)
     real(8), dimension(:,:), allocatable    :: vel, f
     integer                                 :: i, c = 1, t
     logical                                 :: fluid_slvr = .false.
-    real(8)                                 :: start, finish
     real(8), dimension(:), allocatable      :: v, p, p0, ro
-    integer, dimension(:), allocatable      :: pntbins
-    integer                                 :: nx, nxy, totbins
-    type (kernel), dimension(:), allocatable :: bins
     type (kernel), dimension(ps%totpnts)     :: krnls
     type (kernel), dimension(:), allocatable :: krnls2
     character(len=50)                        :: u_fname = 'u', phi_fname = 'phi'
@@ -114,36 +107,17 @@ subroutine slv_ac_singleseed_2d(ps, sp, mat, bcs, u, phi, vel0)
     end if
     vel = vel0
 !------------------------------------------------------------------------------------------
-! Calculate bounds of neighbour search bins
-    nx = 30
-    call gen_bins(ps%pnts, ps%totpnts, ps%dim, ps%dx, nx, nxy, totbins, bins, pntbins)
-!------------------------------------------------------------------------------------------
     write(*,'(a)') "Constructing krnls..."
-    call cpu_time(start)
-    !call get_nbrs_bf(sp%h, ps%pnts, ps%totpnts, ps%pnts, ps%totpnts, krnls)
-    call get_nbrs_bg(ps%pnts, pntbins, ps%totpnts, bins, nx, nxy, totbins, ps%dim, sp%h, krnls)
-    select case(sp%krnl)
-        case (1)
-            call get_rbf_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, sp%rbf_polyex, krnls)
-        case (2)
-            call get_mls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%mls, sp%order, sp%h, krnls)
-        case (3)
-            call get_wls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%wls, sp%order, sp%h, krnls)
-        case (4)
-            call get_sph_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%sph, ps%dim, sp%h,  krnls)
-        case (5)
-            call get_krg_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, krnls)
-    end select
-    call get_intrps_o2(ps%pnts, ps%totpnts, krnls)
-    call cpu_time(finish)
-
+    call get_krnls(ps, sp, krnls)
     if (fluid_slvr .eqv. .true.) then
         allocate(krnls2(ps%totpnts))
-        call get_nbrs_bf(sp%h, ps%pnts, ps%totpnts, ps%pnts, ps%totpnts, krnls2) !find a better way instead of doing this twice
+        do i = 1, ps%totpnts
+            krnls2(i)%nbrs = krnls(i)%nbrs
+            krnls2(i)%totnbrs = krnls(i)%totnbrs
+        end do
         call get_sph_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%sph, ps%dim, sp%h,  krnls2)
         call get_intrps_o2(ps%pnts, ps%totpnts, krnls2)
     end if
-    print '("interpolants construction time = ",f10.1," seconds")',finish-start
 !------------------------------------------------------------------------------------------
     write(*,'(a)') "Computing transient solution..."
     if (sp%vtk .eqv. .true.) then
@@ -285,10 +259,7 @@ subroutine slv_ac_singleseed_2d_prv(ps, sp, mat, bcs, u, phi, vel0)
     use bc_struct
     use krnl_cmn
     use krnl_sph
-    use krnl_rbf
-    use krnl_wls
-    use krnl_mls
-    use krnl_krg
+    use slvr_cmn
     use intrf
     use pntst
     use bndry
@@ -307,11 +278,7 @@ subroutine slv_ac_singleseed_2d_prv(ps, sp, mat, bcs, u, phi, vel0)
     real(8), dimension(:,:), allocatable    :: vel, f
     integer                                 :: i, c = 1, t
     logical                                 :: fluid_slvr = .false.
-    real(8)                                 :: start, finish
     real(8), dimension(:), allocatable      :: v, p, p0, ro
-    integer, dimension(:), allocatable      :: pntbins
-    integer                                 :: nx, nxy, totbins
-    type (kernel), dimension(:), allocatable :: bins
     type (kernel), dimension(ps%totpnts)     :: krnls
     type (kernel), dimension(:), allocatable :: krnls2
     character(len=50)                        :: u_fname = 'u', phi_fname = 'phi'
@@ -334,36 +301,17 @@ subroutine slv_ac_singleseed_2d_prv(ps, sp, mat, bcs, u, phi, vel0)
     end if
     vel = vel0
 !------------------------------------------------------------------------------------------
-! Calculate bounds of neighbour search bins
-    nx = 30
-    call gen_bins(ps%pnts, ps%totpnts, ps%dim, ps%dx, nx, nxy, totbins, bins, pntbins)
-!------------------------------------------------------------------------------------------
     write(*,'(a)') "Constructing krnls..."
-    call cpu_time(start)
-    !call get_nbrs_bf(sp%h, ps%pnts, ps%totpnts, ps%pnts, ps%totpnts, krnls)
-    call get_nbrs_bg(ps%pnts, pntbins, ps%totpnts, bins, nx, nxy, totbins, ps%dim, sp%h, krnls)
-    select case(sp%krnl)
-        case (1)
-            call get_rbf_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, sp%rbf_polyex, krnls)
-        case (2)
-            call get_mls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%mls, sp%order, sp%h, krnls)
-        case (3)
-            call get_wls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%wls, sp%order, sp%h, krnls)
-        case (4)
-            call get_sph_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%sph, ps%dim, sp%h,  krnls)
-        case (5)
-            call get_krg_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, krnls)
-    end select
-    call get_intrps_o2(ps%pnts, ps%totpnts, krnls)
-    call cpu_time(finish)
-
+    call get_krnls(ps, sp, krnls)
     if (fluid_slvr .eqv. .true.) then
         allocate(krnls2(ps%totpnts))
-        call get_nbrs_bf(sp%h, ps%pnts, ps%totpnts, ps%pnts, ps%totpnts, krnls2) !find a better way instead of doing this twice
+        do i = 1, ps%totpnts
+            krnls2(i)%nbrs = krnls(i)%nbrs
+            krnls2(i)%totnbrs = krnls(i)%totnbrs
+        end do
         call get_sph_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%sph, ps%dim, sp%h,  krnls2)
         call get_intrps_o2(ps%pnts, ps%totpnts, krnls2)
     end if
-    print '("interpolants construction time = ",f10.1," seconds")',finish-start
 !------------------------------------------------------------------------------------------
     write(*,'(a)') "Computing transient solution..."
     if (sp%vtk .eqv. .true.) then

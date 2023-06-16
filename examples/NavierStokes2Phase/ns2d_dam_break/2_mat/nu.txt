@@ -1,0 +1,3 @@
+0.0148   fluid viscosity in phase 1
+
+0.001    fluid viscosity in phase 2

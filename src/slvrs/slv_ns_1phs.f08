@@ -73,12 +73,7 @@ subroutine slv_ns_1phs(ps, vel1, P1, f, phi, mat, bcs, sp)
     use slvr_prmtrs_struct
     use mat_struct
     use pntst
-    use krnl_cmn
-    use krnl_sph
-    use krnl_rbf
-    use krnl_mls
-    use krnl_wls
-    use krnl_krg
+    use slvr_cmn
     use bndry
     use trnsprt
     use ns
@@ -94,15 +89,11 @@ subroutine slv_ns_1phs(ps, vel1, P1, f, phi, mat, bcs, sp)
 !------------------------------------------------------------------------------------------
     type (kernel), dimension(ps%totpnts)    :: krnls
     integer                                 :: c = 1, t
-    real(8), dimension(ps%totpnts)          ::  vof, q, u
+    real(8), dimension(ps%totpnts)          :: vof, q, u
     real(8), dimension(:,:), allocatable    :: vel
     real(8), dimension(:), allocatable      :: v,p, ro
-    real(8)                                 :: start, finish
     integer                                 :: i
     real(8)                                 :: nu, k, alpha, ro0 = 0, t0 = 0
-    integer, dimension(:), allocatable      :: pntbins
-    integer                                 :: nx, nxy, totbins
-    type(kernel), dimension(:), allocatable :: bins
     character(len=50)                       :: v_fname = 'v', p_fname = 'p', u_fname = 'u'
 !------------------------------------------------------------------------------------------
     write(*,'(a)') "Initializing field variable distribution..."
@@ -135,29 +126,8 @@ subroutine slv_ns_1phs(ps, vel1, P1, f, phi, mat, bcs, sp)
         T0 = 0.5*(sp%Thot - sp%Tcold)
     end if
 !------------------------------------------------------------------------------------------
-    ! Calculate bounds of neighbour search bins
-    nx = 30
-    call gen_bins(ps%pnts, ps%totpnts, ps%dim, ps%dx, nx, nxy, totbins, bins, pntbins)
-!------------------------------------------------------------------------------------------
     write(*,'(a)') "Constructing krnls..."
-    call cpu_time(start)
-    !call get_nbrs_bf(sp%h, ps%pnts, ps%totpnts, ps%pnts, ps%totpnts, krnls)
-    call get_nbrs_bg(ps%pnts, pntbins, ps%totpnts, bins, nx, nxy, totbins, ps%dim, sp%h, krnls)
-    select case(sp%krnl)
-        case (1)
-            call get_rbf_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, sp%rbf_polyex, krnls)
-        case (2)
-            call get_mls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%mls, sp%order, sp%h, krnls)
-        case (3)
-            call get_wls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%wls, sp%order, sp%h, krnls)
-        case (4)
-            call get_sph_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%sph, ps%dim, sp%h,  krnls)
-        case (5)
-            call get_krg_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, krnls)
-    end select
-    call get_intrps_o2(ps%pnts, ps%totpnts, krnls)
-    call cpu_time(finish)
-    print '("intrpolants construction time = ",f10.1," seconds")',finish-start
+    call get_krnls(ps, sp, krnls)
 !------------------------------------------------------------------------------------------
     write(*,'(a)') "Computing transient solution..."
     if (sp%vtk .eqv. .true.) then

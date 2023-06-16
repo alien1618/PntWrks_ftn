@@ -18,7 +18,7 @@ subroutine  run_trnsprt_ss()
 !------------------------------------------------------------------------------------------
     real(8), dimension(:), allocatable      :: k         !diffusivity for 2 phases
     real(8), dimension(:), allocatable      :: q         !generation trm
-    real(8), dimension(:), allocatable      :: u     !field variable distribution
+    real(8), dimension(:), allocatable      :: u         !field variable distribution
     real(8), dimension(:,:), allocatable    :: v         !advective velocity in xyz
     real(8), dimension(:), allocatable      :: phi       !volume of fluid distribution (0,1)
     type(pointset)                          :: ps        !point set data structure
@@ -60,14 +60,8 @@ subroutine  slv_trnsprt_ss(ps, bcs, sp, d, u, vof, vel, q)
     use krnl_struct
     use bc_struct
     use slvr_prmtrs_struct
+    use slvr_cmn
     use pntst
-    use krnl_cmn
-    use krnl_sph
-    use krnl_rbf
-    use krnl_mls
-    use krnl_wls
-    use krnl_krg
-    use krnl_gfd
     use bndry
     use trnsprt
 !------------------------------------------------------------------------------------------
@@ -82,34 +76,13 @@ subroutine  slv_trnsprt_ss(ps, bcs, sp, d, u, vof, vel, q)
     type(kernel), dimension(ps%totpnts)        ::  krnls
     character(len=50)                          ::  fname = 'u'
     integer                                    ::  c = 1, t
-    real(8)                                    ::  start, finish
     real(8)                                    ::  tol = 1.0e-3, res = 0.0, u_sum, u_sum_old
 !------------------------------------------------------------------------------------------
-    u_sum = sum(u);
+    u_sum = sum(u)
     u_sum_old = u_sum
 !------------------------------------------------------------------------------------------
     write(*,'(a)') "Constructing krnls..."
-    call cpu_time(start)
-    call get_nbrs_sp(sp%h, vof, ps%pnts, ps%totpnts, krnls)
-    select case(sp%krnl)
-        case (1)
-            call get_rbf_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, sp%rbf_polyex, krnls)
-        case (2)
-            call get_mls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%mls, sp%order, sp%h, krnls)
-        case (3)
-            call get_wls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%wls, sp%order, sp%h, krnls)
-        case (4)
-            call get_sph_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%sph, ps%dim, sp%h,  krnls)
-        case (5)
-            call get_krg_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, krnls)
-        case (6)
-            call get_gfd_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%gfd, sp%h,  krnls)
-    end select
-    if (sp%krnl < 6) then
-        call get_intrps_o2(ps%pnts, ps%totpnts, krnls)
-    end if
-    call cpu_time(finish)
-    print '("intrpolants construction time = ",f10.1," seconds")',finish-start
+    call get_krnls(ps, sp, krnls)
 !------------------------------------------------------------------------------------------
     write(*,'(a)') "Computing transient solution..."
     call prnt_vtk(u, ps, fname, 0)
@@ -127,8 +100,6 @@ subroutine  slv_trnsprt_ss(ps, bcs, sp, d, u, vof, vel, q)
         u_sum = sum(u);
         res = abs(u_sum-u_sum_old)
         if (res <= tol) exit
-        !write(*,'(a,f10.6)') "res = ", res
-
         if (t/sp%prnt_frq == c) then
             write(*,*) "res = ", res
             call prnt_vtk(u, ps, fname, t)

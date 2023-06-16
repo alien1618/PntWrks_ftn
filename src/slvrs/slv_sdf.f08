@@ -4,9 +4,8 @@ contains
 
 subroutine run_sdf()
 !------------------------------------------------------------------------------------------
-!   This subroutine solves the allen-cahn phase-field equations for dendritic
-!   solidification in a pure liquid. Solution is obtained using explicit time 
-!   stepping schemes and local strong-form meshfree methods.     
+! For a pointset ps, this subroutine computes a signed distance function whose zero-isocontour
+! correspond to a set of interface points ip.
 !------------------------------------------------------------------------------------------
     use pntst_struct
     use slvr_prmtrs_struct
@@ -20,8 +19,8 @@ subroutine run_sdf()
     use omp_lib
     use prmtrs
 !------------------------------------------------------------------------------------------
-    type(pointset)                          :: ps, ip       !pointset data structure
-    real(8), dimension(:), allocatable      :: phi      !phase-field parameter distribution
+    type(pointset)                          :: ps, ip   !pointset data structure
+    real(8), dimension(:), allocatable      :: phi      !signed distance function
     type(slvr_prmtrs)                       :: sp       !solver parameters data structures
     real(8)                                 :: start, finish !timer parameters
     character(len=50)                       :: ip_fname, phi_fname = 'phi'

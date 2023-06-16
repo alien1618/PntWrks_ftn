@@ -1,0 +1,1144 @@
+\documentclass[12pt]{extarticle}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{algorithmic}
+\usepackage{algorithm}
+\usepackage{amssymb}
+\usepackage{authblk}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{moreverb}
+\usepackage{empheq}
+\usepackage[dvips,colorlinks,bookmarksopen,bookmarksnumbered,citecolor=red,urlcolor=red]{hyperref}
+
+\bibliographystyle{ieeetr} 
+ 
+\begin{document}
+\title{PntWrks3D user Manual}
+\author{Adam Yehudi Ghoneim}
+\renewcommand\Affilfont{\itshape\small}
+\affil{Department of Mechanical Engineering \\ University of Manitoba, Winnipeg, Manitoba R3T-5V6, Canada}
+\date{19-DEC-2022}
+\maketitle
+
+\section{What is PntWrks3D?}
+PntWrks3D is a numerical simulation solver written in modern fortran and is dedicated to strong-form meshfree solution of partial differential equations encountered in multiphase-flow and phase transformation. This is done by discretizing an arbitrary domain geometry using fixed or moving points without connectivity information. The meshfree points are used for interpolation but can also be regarded as particles if assigned a mass.
+
+\vspace{5 mm}
+Modern Fortran is chosen as the language of choice to write PntWrks3D because it was found to be the most efficient language that I was able to write mathematical codes in. It is simple, very fast and has many intrinsic mathematical functions that are built-in already in the language itself eliminating the need for depending on third party libraries. Earlier versions of the code were actually written in C++. Unfortunately, I was never able to make it as fast and efficient as code written in Fortran. This is most likely due to my own limited knowlege and mastery of the countless techniques to produce efficient code in C++. Afterall, I consider myself a mathematician first and a programmer second. After a number of years, C++ proved to be just too cumbersome for mathematical and numerical coding that I found myself spending a large amount of time dealing with programming paradigms and performance related issues in C++ rather than focusing on the mathematical problem itself that I am trying to solve.
+
+\vspace{5 mm}
+The purpose of this document is to present the mathematical background and implmentation of the code library PntWrks3D. Numerical simulations and analysis data obtained using this code will also be presented and discussed in this document. 
+
+\section{What can PntWrks3D do?}
+PntWrks3D can currently compute the strong-form meshfree solution of the following in 2 or 3 spatial dimensions and 1 temporal dimension (hence the name 4D):
+\begin{itemize}
+\item interpolation of scattered data points to approximate a function and its derivatives
+\item implicit surface construction of scattered data points
+\item solving general transport equations such as poisson, laplace, parabolic, advection-diffusion, reaction-diffusion, and  equations
+\item solving the level-set equation
+\item solving the Cahn-Hilliard phase-field equation
+\item solving the Allen-Cahn phase-field equation 
+\item solving the single-phase incompressible Navier-Stokes equations
+\item solving the two-phase incompressible Navier-Stokes equations
+\item solving transient elasticity and deformation equations
+\end{itemize}
+
+\vspace{5 mm}
+This is achieved via a number of meshfree interpolation methods:
+\begin{itemize}
+\item Radial basis functions
+\item Moving least squares
+\item Weighted least squares
+\item Least squares
+\item Normalized smoothed particle weighting functions
+\item Generalized finite difference
+\end{itemize}
+
+\vspace{5 mm}
+When the particles are fixed in space, propagating interfaces are solved using the following methods:
+\begin{itemize}
+\item volume-of-fluid
+\item level set
+\item Cahn-Hilliard or Allen-Cahn phase field
+\item meshfree interface tracking
+\end{itemize}
+
+\section{Mathematical Theory of Interpolation Methods}
+In a nutshell, the basic procedure for the strong-form meshfree solution of a partial differential equation (PDE) is to approximate the field variable $u_i$ at point $\textbf{x}_{i}$ using the values $u_{j}$ at neighbouring points $\textbf{x}_j \in  \left \{\textbf{x} \right \}_{nbrs}$  such that:
+\begin{empheq}[box=\fbox]{align}
+    \hat{u_{i}} \approx \sum_{j=1}^{n} u_{j} N_{ij}
+\label{SPH1}
+\end{empheq}
+where $N_{ij}$ is an interpolation function that provides a weight or degree of influence from neighbouring point $\textbf{x}_{j}$ on point $\textbf{x}_{i}$, and $n$ is the total number of neighbouring points. Applying the same methodology to approximate the first and second order derivative of $u_i$ at $\textbf{x}_i$, one can approximate the first order derivative as:
+\begin{equation}
+    \nabla \hat{u_{i}} \approx \sum_{j=1}^{n} u_{j} \nabla N_{ij}
+\label{nabla1}
+\end{equation}
+and the second order derivatives is approximated as:
+\begin{equation}
+    \nabla^{2} \hat{u_{i}} \approx \sum_{j=1}^{n} u_{j} \nabla^{2} N_{ij}
+\label{nabla2}
+\end{equation}
+
+Note that if the field variable $u_{j}$ is constant then the approximation in \ref{nabla1} will yield a non-zero answer. A better approximation of the first order derivative is: 
+\begin{empheq}[box=\fbox]{align}
+    \nabla \hat{u_{i}} \approx \sum_{j=1}^{n} \Big(u_{j}-u_{i}\Big) \nabla N_{ij} 
+\label{SPH2_2}
+\end{empheq}
+
+\vspace{5 mm}
+Directly computing the second-order derivative by directly computing the second-order derivative of the interpolation function as presented in equation \ref{nabla2} is prone to instabilities and is very sensitive to particle distribution. One approach is to approximate the second-order derivative by differentiating the first-order derivatives of the weighting functions twice such that:
+\begin{equation}
+    \nabla^{2} \hat{u_{i}} = \nabla \cdot \nabla \hat{u_{i}} \approx  \sum_{j=1}^{n} \Big(\nabla u_{j} - \nabla u_{i} \Big) \cdot \nabla N_{ij}
+\label{SPH_2nabla}
+\end{equation}
+A better approach uses a Taylor series expansion in a similar manner to finite differences to achieve the approximation:
+\begin{empheq}[box=\fbox]{align}
+\label{SPH_nabladifferencing1}
+    \nabla^2 \hat{u_{i}} \approx 2  \sum_{j=1}^{n} \frac{\Big( u_{j}- u_{i} \Big) }{|\textbf{r}_{ji}|^{2}} \textbf{r}_{ji} \cdot \nabla N_{ij}
+\end{empheq}
+where $\textbf{r}_{ji} = \textbf{x}_{j}-\textbf{x}_{i}$ is the Unit vector between interacting points $\textbf{x}_j$ and $\textbf{x}_i$.
+
+\vspace{5 mm}
+It is interesting to note that one can actually approximate the first and second order derivatives using only zero-order interpolants such that:
+\begin{empheq}[box=\fbox]{align}
+    \nabla \hat{u_{i}} \approx \sum_{j=1}^{n} \textbf{r}_{ij} \Big(u_{j}-u_{i} \Big)  N_{ij} 
+\label{SPH2_2}
+\end{empheq}
+and 
+\begin{empheq}[box=\fbox]{align}
+    \nabla^2 \hat{u_{i}} \approx \sum_{j=1}^{n} \frac{1}{|\textbf{r}_{ji}|^{2}} \Big(u_{j}-u_{i} \Big)  N_{ij}
+\label{SPH2_2}
+\end{empheq}
+
+\vspace{5 mm}
+These three equations used to approximate a field variable $u_{i}$ and its derivatives form the backbone of PntWrks3D. Once the meshfree derivatives of field variables can be calculated, it can be used directly for solving a wide range of PDE's. However, obviously to achieve this, we must first somehow evaluate the interpolation functions $N_{ij}$ and at the very least their first-order derivatives. In the following sections I present the mathematical derivations of the various methods used in PntWrks3D.
+
+\subsection{Smoothed Kernel Approximation}
+The SPH is based on approximating a field variable $u_{i}$ at point $\textbf{x}_{i}$ by:
+\begin{equation}
+    u_{i} = \int_{\Omega} u_{j} \delta_{ij} \Delta V
+\end{equation}
+where $j$ is a neighbouring point, $\Omega$ is the volume of the domain containing $\textbf{x}$ and $\delta_{ij}$ is the Dirac delta function defined by:
+\[ \delta_{ij} = \left\{
+  \begin{array}{l l l}
+    1, & \quad & \textbf{x}_{i} = \textbf{x}_{j} \\
+    0, & \quad & \textbf{x}_{i} \neq \textbf{x}_{j}
+  \end{array} \right.\]
+\begin{equation}
+\label{derac_delta}
+\end{equation}
+To establish a meaningful discrete numerical model, the delta function $\delta_{ij}$ is replaced by a smooth kernel function $W(\textbf{x}_{i}-\textbf{x}_{j},h) = w_{ij}$ where $h$ is a kernel smoothing length defining the size of the support area. The function $u_{i}$ can then be approximated by $\hat{u}_{i}$ by:
+\begin{equation}
+\hat{u}_{i} \approx \int_{\Omega} u_{j} w_{ij} \Delta V
+\label{kernel1}
+\end{equation}
+
+\vspace{5 mm}
+Equation \ref{kernel1} can be re-written in discrete form for point $\textbf{x}_i$ in terms of the set of neighbouring particles $\left \{ \textbf{x} \right \}_{nbrs}$ such that:
+\begin{equation}
+\hat{u}_{i} \approx \sum_{j=1}^{n} u_{j} w_{ij} \Delta V_{j} = \sum_{j=1}^{n} u_{j} N_{ij}
+\label{SPH00}
+\end{equation}
+where $n$ is the total number of points in the kernel containing $\left \{\textbf{x} \right \}_{nbrs}$ and the term $w_{ij} \Delta V_{j}$ forms an interpolant $N_{ij}$ that weighs the influence of a neighbor point $\textbf{x}_j$ on the solution at $\textbf{x}_i$ such that its influence decreases as it gets farther from $\textbf{x}_{i}$. Indeed, it could be argued that this is basically the approximation approach of all strong-form meshfree methods that were developed after the SPH where they mainly differ in the manner of constructing the interpolant $N_{ij}$. Equation \ref{SPH00} can be re-expressed as:
+\begin{equation}
+\hat{u}_{i} \approx \sum_{j=1}^{n}u_{j}w_{ij} \Delta V_{j} = \sum_{j=1}^{n} u_{j} w_{ij} \frac{1}{\rho_{j}}(\rho_{j}\Delta V_{j})
+\end{equation}
+or alternatively:
+\begin{equation}
+\hat{u}_{i} \approx \sum_{j=1}^{n} u_{j} w_{ij} \frac{m_{j}}{\rho_{j}}
+\end{equation}
+where $\rho_{j}$ and $m_{j}$ is the density and mass of neighbouring point $j$, respectively. Notice that if a density and mass is assigned to a point, it can now be regarded as a particle. 
+
+\vspace{5 mm}
+To choose a suitable kernel function $w_{ij}$ within the context of SPH, Monaghan proposed three main conditions. The first is the so called normalization (or Unity) condition defined as:
+\begin{equation}
+\int_{\Omega} w_{ij} \Delta V = 1
+\end{equation}
+The second condition is the so called Delta function property defined as:
+\begin{equation}
+\lim_{h \rightarrow 0} w_{ij} \Delta V = \delta_{ij}
+\end{equation}
+This means that as the kernel smoothing length $h$ decreases, the delta property in equation \ref{derac_delta} is recovered. The third condition is the compactness condition defined as:
+\begin{equation}
+w_{ij} = 0  \quad \forall \quad |\textbf{x}_{i} - \textbf{x}_{j}| > h
+\end{equation}
+A popular kernel function satisfying these conditions is the Gaussian kernel defined by:
+\begin{equation}
+    w_{ij} = \frac{1}{\pi^{(d/2)}h^d} e^{-R^2}
+\label{GaussKernel0}
+\end{equation}
+where $d$ is the spatial dimension of the problem $d =\{1,2,3 \}$ and $R = \frac{|\textbf{x}_{i}-\textbf{x}_{j}|}{h} = \frac{r_{ij}}{h}$. Another kernel function is the cubic spline kernel function expressed as:
+\[ w_{ij} = C_{h} \left\{
+  \begin{array}{l l l}
+    (2-R)^{3}-4(1-R)^{3} & \quad if & 0 \leq R < 1 \\
+     (2-R)^{3} & \quad if & 1\leq R < 2 \\
+    0, & \quad if & q \geq 2
+  \end{array} \right.\]
+\begin{equation}
+\label{CubicSpline0}
+\end{equation}
+where $C_{h}$ is $1/(6h)$ in one dimension, $15/(14 \pi h^2)$ in two dimensions and $1/(4 \pi h^{3})$ in three dimensions. Wendland kernel functions have also been used in SPH. One type is the so-called quintic Wendland kernel function expressed as:
+\[ w_{ij} = C_{h} \left\{
+  \begin{array}{l l l}
+    (2-R)^{4} (2R + 1) & \quad if & 0 \leq R \leq 2 \\
+    0 & \quad if & R > 2 \\
+  \end{array} \right.\]
+\begin{equation}
+\label{Wendland0}
+\end{equation}
+where $C_{h}$ is $7/(4 \pi h^{2})$ in 2D and $C_{h}$ is $21/(16 \pi h^{3})$ in 3D.
+
+\vspace{5 mm}
+The main difficulty in using the kernel functions in \ref{GaussKernel0}, \ref{CubicSpline0} and \ref{Wendland0} directly into the approximation in equation \ref{SPH00} is that it fails even the zero-order consistency (reproducibility) condition where $\sum_{j=1}^{n} w_{ij} \Delta V_{j} \neq 1$ at the domain boundaries due to the kernel being only partially contained within the domain. In other words, the kernel functions used in classical SPH will not satisfy the partition of Unity (POu) condition necessary for consistency. Exhibiting the consistency property is a necessary ingredient to achieve convergence of a numerical solution. An easy approach to resolve this issue is to re-assign the weights to points within the kernel such that the POu property is recovered. This can be done by through normalization:
+\begin{equation}
+\hat{u}_{i} \approx \frac{1}{D} \sum_{j=1}^{n} u_{j} w_{ij} \Delta V_j
+\label{SPH1n}
+\end{equation}
+where $D = \sum_{j=1}^{n} w_{ij} \Delta V_{j}$ and 
+\begin{equation}
+    \frac{1}{D} \sum_{j=1}^{n} w_{ij} \Delta V_{j} = \sum_{j=1}^{n} \frac{w_{ij} \Delta V_{j}}{\sum_{j=1}^{n} w_{ij} \Delta V_{j}} = 1
+\end{equation}
+The interpolation function between point $i$ and neighbour point $j$ can then be expressed as:
+
+\begin{empheq}[box=\fbox]{align}
+    N_{ij} = \frac{w_{ij}}{\sum_{j=1}^{n} w_{ij}}
+\end{empheq}
+similary, the first and second order derivatives can be approximated as:
+\begin{empheq}[box=\fbox]{align}
+    \nabla N_{ij} = \frac{\nabla w_{ij}}{\sum_{j=1}^{n} w_{ij}}
+\end{empheq}
+\begin{empheq}[box=\fbox]{align}
+    \nabla^{2} N_{ij} = \frac{\nabla^{2} w_{ij}}{\sum_{j=1}^{n} w_{ij}}
+\label{SPH_nabla2}
+\end{empheq}
+
+It should be noted that this approach of normalizing interpolants coincides with Shepard's interpolation which is itself considered a special case of MLS approximation. However, Shepard's interpolation is only zero-order continuous. To Achieve high order of consistency we next look at more sophisticated approaches to construct the interpolants. It should also be noted that in PntWrks3D, we actually don't use equation \ref{SPH_nabla2} to approximate second order derivatives directly but rather use equation \ref{SPH2_2} stated earlier.
+
+\subsection{Radial Basis Function Interpolation}
+To construct the RBF interpolants, the Euclidean distance $r_{ij}$ between a point $\textbf{x}_i$ to a neighbouring point $\textbf{x}_j$ is computed such that:
+\begin{equation} 
+    r_{ij} = \left\| \textbf{x}_i - \textbf{x}_j \right\|
+  \label{eq026}
+\end{equation}
+Common RBF functions include multiquadrics, inverse multiquadrics, Gaussian exponential, Thin-plate spline and Logarithmic RBF. The Gaussian exponential RBF is expressed as:
+\begin{equation} 
+    R_{ij} = exp(-\gamma(\frac{r_{ij}}{h})^{2})   
+  \label{eq027}
+\end{equation}
+where $h$ is the size of the kernel radius, $\gamma$ is a shape parameter that is often problem dependent. Notice that an attractive property of this function is that regardless of the order of differentiation, it is continuously differentiable. A smaller shape parameter yields a wider, or flatter, weight function which will therefore alter the constructed RBF interpolant. It has been reported in the literature that the optimum shape parameter for Gaussian exponential basis yielding best accuracy is in the range of $\gamma = 0.003-0.03$.
+
+\vspace{5 mm}
+For our point $\textbf{x}_i$, the field variable $u_{i}$ can be approximated by RBF such that:
+\begin{equation}
+    \hat{u_{i}} = \sum_{j=1}^{n}R_{ij}a_j+\sum_{k=1}^{m}P_{ik}b_k=  \begin{bmatrix} R_{i} & P_{i} \end{bmatrix} \begin{bmatrix} a \\ b \end{bmatrix}
+   \label{eq028}
+\end{equation}
+where $R_{ij}$ is a RBF evaluated at the point $\textbf{x}_i$, $P_{ik}$ is a monomial evaluated at $\textbf{x}_i$, $n$ is the total number of neighbouring points, $m$ is the number of polynomial basis functions while $a_j$ and $b_k$ are unknowns to be determined. For a second order polynomial basis function:
+\begin{equation}
+    P =\begin{bmatrix} 1,& x_i,& y_i,& z_i,& x_i^2,& y_i^2,& z_i^2,& x_iy_i,& x_iz_i,& y_iz_i \end{bmatrix}
+      \label{eq032}
+     \end{equation}
+To satisfy equation \ref{eq028} at all neighbouring points, we express it in matrix form:
+\begin{equation}
+\textbf{u}=[\textbf{R} \quad \textbf{P}]  \begin{bmatrix} a \\ b \end{bmatrix}
+  \label{eq034}
+\end{equation}
+where
+  \begin{equation}
+      \textbf{u} = \begin{bmatrix}u_{1},& u_{2},& u_{3},& ....,& u_{n}\end{bmatrix}^{T}
+   \label{eq035}
+   \end{equation}
+$\textbf{R}$ is an $n$ x $n$ matrix, and $\textbf{P}$ is an $n$ x $m$ matrix. Clearly there are $n+m$ unknowns and only $n$ equations. Therefore, we require to impose the constraint:
+\begin{equation}
+\textbf{u} = \begin{bmatrix}
+\textbf{R} & \textbf{P} \\
+\textbf{P} & 0
+\end{bmatrix}
+\begin{bmatrix} a \\ b \end{bmatrix} = \textbf{A} \begin{bmatrix} a \\ b \end{bmatrix}
+  \label{eq039}
+\end{equation}
+To determine the unknowns $[a]$ and $[b]$ we can re-express this equation to be
+\begin{equation}
+\begin{bmatrix} a \\ b \end{bmatrix} = \textbf{A}^{-1} \textbf{u}
+  \label{eq040}
+\end{equation}
+which can then be substituted back into equation \ref{eq028} to yield:
+\begin{equation}
+    \hat{u_{i}} =\begin{bmatrix} R_{i} & P_{i} \end{bmatrix}\textbf{A}^{-1} \textbf{u} = \textbf{N} \textbf{u}
+  \label{eq041}
+\end{equation}
+where $\textbf{N}$ are the set of interpolation functions $\textbf{N}=\begin{bmatrix} N_1, N_2, N_3, ... , N_n\end{bmatrix}$ computed by:
+\begin{empheq}[box=\fbox]{align}
+    \textbf{N} = \begin{bmatrix} R_{i} & P_{i} \end{bmatrix}\textbf{A}^{-1}
+  \label{eq042}
+\end{empheq}
+First and second order derivatives of the constructed RBF interpolants can be computed by: 
+\begin{empheq}[box=\fbox]{align}
+       \frac{\partial \textbf{N}}{\partial \delta} = \begin{bmatrix}\frac{\partial R_{i}}{\partial \delta} & \frac{\partial P_{i}}{\partial \delta} \end{bmatrix}\textbf{A}^{-1}
+  \label{eq043}
+\end{empheq}
+where  $\frac{\partial}{\partial \delta}$ is a partial derivative with respect to $\delta=\left\{x, y, z, xx, yy, zz, xy, xz, yz\right\}$.
+
+\vspace{5 mm}
+Properties of the constructed interpolants include the satisfaction of the partition of Unity property:
+\begin{equation}
+    \sum_{j=1}^{n} N_{ij} = 1
+  \label{eq044}
+\end{equation}
+In addition to the Kronecker delta property:
+\begin{equation}
+N_{ij}=
+\begin{Bmatrix}
+    1 & \quad  & for & j = i \\
+    0 & \quad  & for & j \neq i
+  \end{Bmatrix*}
+    \label{eq045}
+\end{equation}
+and the reproducing property:
+\begin{equation}
+\sum_{j=1}^{n} u N_{ij} = u
+  \label{eq046}
+  \end{equation}
+ 
+\subsection{Moving Least Squares Approximantion}
+Consider a point $\textbf{x}_{i}$. A field variable solution $u_{i}$ can be approximated by using a polynomial such that:
+\begin{equation}
+    \hat{u_{i}} = \sum_{k=1}^{m}p_{ik}a_{k} = \textbf{p}^{T} \textbf{a}
+\label{rmls}
+\end{equation}
+where $m$ is the number of monomials, $a$ are unknown coefficients, and for a second order polynomial $p$ is expressed as:
+\begin{equation}
+    p^{T} = [1, x, y, z, x^{2}, y^{2}, z^{2}, xy, xz, yz]
+\end{equation}
+
+Let us introduce a weighting function and minimize the weighted residual such that:
+\begin{equation}
+J = \sum_{i=1}^{n} w(\hat{u}-u)^{2}
+\end{equation}
+where $n$ is the neighbouring points, $w$ is a weighting function and $\hat{u}$ is an approximate value of $u$. This equation can be re-expressed as:
+\begin{equation}
+J = \sum_{j=1}^{n} w \Big( \sum_{k=1}^{m} p_{ik}a_{k} - u \Big)^{2}
+\end{equation}
+which can be rewriten in the form:
+\begin{equation}
+J = \Big(\textbf{P} \textbf{a} - \textbf{u} \Big)^{T} \textbf{W} \Big(\textbf{P}\textbf{a}-\textbf{u}\Big)
+\end{equation}
+we minimize $J$ by differentiating it and forcing it to zero such that:
+\begin{equation}
+\frac{\partial J}{\partial \textbf{a}} = \Big( \textbf{P}^{T}\textbf{W}\textbf{P} \Big) \textbf{a} - \Big(\textbf{P}^{T}\textbf{W} \Big) \textbf{u} = 0
+\end{equation}
+where 
+\begin{equation}
+\textbf{u}^{T} = [u_{1}, u_{2}, u_{3}, ..., u_{n}]
+\end{equation}
+and the coefficients $\textbf{a}$ are constantly changing, or moving and, hence the name "moving least squares". 
+
+In the MLS, a distance-dependent weighting function is used such that:
+\[ w(r_{ij}) = \left\{
+  \begin{array}{l l l l l l}
+    w_{g}(r_{ij}) & \quad  & r_{ij} \leq h \\
+    0 & \quad  & r_{ij} > h
+  \end{array} \right.\]
+\begin{equation}
+  \label{eq044}
+\end{equation}
+where $h$ is the kernel radius and $r_{ij}$ is the Eucledian distance between the point $\textbf{x}_{i}$ and neighbouring point $\textbf{x}_{j}$ such that
+\begin{equation}
+r_{ij} = \left| \textbf{x}_{i}-\textbf{x}_{j} \right|
+  \label{eq045}
+\end{equation}
+common weighting functions is the Gaussian weighting function of the exponential type
+\begin{equation}
+w_g(r_{ij}) = \frac{e^{-(r_{ij}/\alpha h)^{2}}-e^{-1/\alpha^{2}}}{1-e^{-1/\alpha^{2}}}
+  \label{eq046}
+\end{equation}
+where $\alpha$ is a shape parameter.
+
+This results in a weighting function matrix such that:
+\begin{equation*}
+\textbf{W}(\textbf{x})= 
+  \begin{bmatrix}
+    w_1(\textbf{x}_1) & \quad  & w_1(\textbf{x}_2) & \quad  & w_1(\textbf{x}_3) & \quad & ... & \quad & w_1(\textbf{x}_n) \\
+    w_2(\textbf{x}_1) & \quad  & w_2(\textbf{x}_2) & \quad  & w_2(\textbf{x}_3) & \quad & ... & \quad & w_2(\textbf{x}_n) \\
+    w_3(\textbf{x}_1) & \quad  & w_3(\textbf{x}_2) & \quad  & w_3(\textbf{x}_3) & \quad & ... & \quad & w_3(\textbf{x}_n) \\
+    . & \quad  & . & \quad  & . & \quad & ... & \quad & . \\
+    . & \quad  & . & \quad  & . & \quad & ... & \quad & . \\
+    . & \quad  & . & \quad  & . & \quad & ... & \quad & . \\
+      w_m(\textbf{x}_1) & \quad  & w_m(\textbf{x}_2) & \quad  & w_m(\textbf{x}_3) & \quad & ... & \quad & w_m(\textbf{x}_n) \\
+  \end{bmatrix}
+\end{equation*}
+for Weighted Least Squares this is simplified to be:
+\begin{equation*}
+\textbf{W}(\textbf{x})= 
+  \begin{bmatrix}
+    w_1(\textbf{x}_1) & \quad  & 0 & \quad  & 0 & \quad & ... & \quad & 0 \\
+    0 & \quad  & w_2(\textbf{x}_2) & \quad  & 0 & \quad & ... & \quad & 0 \\
+    0 & \quad  & 0 & \quad  & w_3(\textbf{x}_3) & \quad & ... & \quad & 0 \\
+    . & \quad  & . & \quad  & . & \quad & ... & \quad & . \\
+    . & \quad  & . & \quad  & . & \quad & ... & \quad & . \\
+    . & \quad  & . & \quad  & . & \quad & ... & \quad & . \\
+      0 & \quad  & 0 & \quad  & 0 & \quad & ... & \quad & w_m(\textbf{x}_n) \\
+  \end{bmatrix}
+\end{equation*}
+if the diagonals of the weight functions matrix are set to 1, the method reduces to the standard Least squares approximation.
+\begin{equation}
+  \label{eq038}
+\end{equation}
+let
+\begin{equation}
+\textbf{A} = \textbf{P}^{T}\textbf{W}\textbf{P}
+  \label{eq040}
+\end{equation}
+and
+\begin{equation}
+\textbf{B} = \textbf{P}^{T}\textbf{W}
+  \label{eq041}
+\end{equation}
+Then the set of unknown coefficients $\textbf{a}$ can be obtained from
+\begin{equation}
+\textbf{a} = \textbf{B}\textbf{A}^{-1}\textbf{u}
+  \label{eq042}
+\end{equation}
+one can then substitute it back into equation \ref{rmls} to obtain $u(\textbf{x})$ such that
+\begin{equation}
+    u_{i} = \textbf{p}^{T}\textbf{B}\textbf{A}^{-1}\textbf{u}
+  \label{eq043}
+\end{equation}
+or simply
+\begin{equation}
+u_{i} = \textbf{N}\textbf{u}
+\label{eq043}
+\end{equation}
+where $\textbf{N}$ are the MLS interpolation functions defined as
+\begin{empheq}[box=\fbox]{align}
+\textbf{N} = \textbf{p}^{T}\textbf{B}\textbf{A}^{-1}
+\label{eq043}
+\end{empheq}
+
+let 
+\begin{equation}
+\gamma^{T} = \textbf{p}^{T} \textbf{A}^{-1}
+\end{equation}
+\begin{equation}
+\textbf{A} \gamma^{T} = \textbf{p}
+\end{equation}
+We follow the technique proposed by Belytschko et. al. to compute the partial derivatives of the interpolants sunch that:
+\begin{empheq}[box=\fbox]{align}
+\textbf{N}^{T}_{\alpha} = \gamma^{T}_{\alpha}\textbf{B} + \gamma^{T} \textbf{B}_{\alpha}
+\end{empheq}
+\begin{empheq}[box=\fbox]{align}
+\textbf{N}^{T}_{\alpha \beta} = \gamma^{T}_{\alpha \beta}\textbf{B} + \gamma^{T}_{\alpha}\textbf{B}_{\beta} + \gamma^{T}_{\beta}\textbf{B}_{\alpha} + \gamma^{T} \textbf{B}_{\alpha \beta}
+\end{empheq}
+where subscripts $\alpha = \left\{x,y,z \right\}$ and $\beta = \left\{x, y, z \right\}$ correspond to the partial derivative with respect to spatial co-ordinates $x$, $y$ and $z$.
+
+\vspace{5 mm}
+Due to the least squares approach, the MLS interpolation does not pass through the nodal values. This implies the interpolation condition is not fulfilled
+\begin{equation}
+N_{ij} \neq \delta_{ij}
+\end{equation}
+Most and Buchar proposed that in order to satisfy 
+\begin{equation}
+N_{ij} = \delta_{ij}
+  \label{eq047}
+\end{equation}
+this can only be satisfied if
+\begin{equation}
+w_{ij} = \delta_{ij}
+\label{delta}
+\end{equation}
+The weighting function value an an interpolation point $\textbf{x}_{i}$ is introduced by the following regularized formulation:
+\begin{equation}
+    w_{ij} = \frac{w_{ij}^{*}}{\sum_{j=1}^{n} w_{ij}^{*}}
+  \label{eq049}
+\end{equation}
+such that:
+\begin{equation}
+w_{ij}^{*} = \frac{A^{-2} - (1 + \alpha)^{-2}}{B}
+  \label{w_rmls}
+\end{equation}
+where 
+\begin{equation}
+    A = \Big(\frac{r_{ij}}{h}\Big)^{2} + \alpha
+\end{equation}
+and
+\begin{equation}
+B = \alpha^{-2} - (1 + \alpha)^{-2}
+\end{equation}
+such that $n$ is the total number of neighbouring points in the kernel and $\alpha$ must be small enough to fulfill equation \ref{delta} and larger than the square root of machine precision to avoid numerical issues. A closer look into equation \ref{w_rmls} would indicate that if the eucledian distance $r_{ij}=0$ (meaning neighbouring point $\textbf{x}_{j}$ coincides with point $\textbf{x}_i$) equation \ref{w_rmls} reduces to $w_{ij}^{*} = 1$ while if $r_{ij} > 0$, $w_{ij}^{*} \approx 0$. In other words, the Kronecker-delta condition is recovered to high degree of accuracy. The first and second order derivatives of the weight function can be easily computed as:
+\begin{equation}
+    \frac{\partial w_{ij}}{\partial r_{ij}} = \frac{-4 r_{ij}}{h^{2}} \frac{A^{-3}}{B}
+\end{equation}
+\begin{equation}
+    \frac{\partial^{2} w_{ij}}{\partial r_{ij}^{2}} = \frac{1}{B} \Big( \frac{24 r_{ij}^2}{h^{4}} A^{-4} - \frac{4}{D^{2}} A^{-3} \Big)
+\end{equation}
+At the influence boundary where $r_{ij} = h$, the derivatives of the weight function can be approximated as:
+\begin{equation}
+    \frac{\partial w_{ij}}{\partial r_{ij}} = \frac{4 \epsilon^{2}}{h}
+\end{equation}
+\begin{equation}
+    \frac{\partial^{2} w_{ij}}{\partial r_{ij}^{2}} = \frac{20 \epsilon^{2}}{h^{2}}
+\end{equation}
+
+\subsection{Generalized Finite Differences}
+In contrast to meshfree approximation methods based on smoothing kernel interpolants, the Generalized Finite Difference Method (GFDM) is based on Taylor series approximation. For a neighbouring point $\textbf{x}_{j}$ in the kernel to the center point $\textbf{x}_{i}$, the field variable $u_{j}$ can be related to $u_{i}$ using Taylor series by:
+
+\begin{equation}
+    u_{j} = u_{i} + h_{ij} \frac{\partial u_{i}}{\partial x} + k_{ij} \frac{\partial u_{i}}{\partial y} + l_{ij} \frac{\partial u_{i}}{\partial z} + \frac{h_{ij}^{2}}{2} \frac{\partial^{2}u_{i}}{\partial x^{2}} + \frac{k_{ij}^{2}}{2} \frac{\partial^{2}u_{i}}{\partial y^{2}} + \frac{l_{ij}^{2}}{2} \frac{\partial^{2}u_{i}}{\partial z^{2}} + h_{ij} k_{ij} \frac{\partial^{2}u_{i}}{\partial x \partial y} + h_{ij} l_{ij} \frac{\partial^{2}u_{i}}{\partial x \partial z} + k_{ij} l_{ij}\frac{\partial^{2}u_{i}}{\partial y \partial z}
+\end{equation}
+where $h_{ij} = x_{i}-x_{j}$, $k_{ij} = y_{i}-y_{j}$,  $l_{ij} = z_{i}-z_{j}$. A functional $J(u)$ is introduced such that
+
+\begin{align*}
+    J(u) = \sum_{j=1}^{n} \bigg( \big(u_{i} - u_{j} + h_{ij} \frac{\partial u_{i}}{\partial x} + k_{ij} \frac{\partial u_{i}}{\partial y} + l_{ij} \frac{\partial u_{i}}{\partial z} + \frac{h_{ij}^{2}}{2} \frac{\partial^{2}u_{i}}{\partial x^{2}} + \frac{k_{ij}^{2}}{2} \frac{\partial^{2}u_{i}}{\partial y^{2}} + \frac{l_{ij}^{2}}{2} \frac{\partial^{2}u_{i}}{\partial z^{2}} + \\ h_{ij} k_{ij} \frac{\partial^{2}u_{i}}{\partial x \partial y} + h_{ij} l_{ij} \frac{\partial^{2}u_{i}}{\partial x \partial z}  + k_{ij} l_{ij}\frac{\partial^{2}u_{i}}{\partial y \partial z} \Big) w_{ij} \Bigg)^{2}
+\end{align*}
+\begin{equation}
+\end{equation}
+where $w_{ij}$ is a weighting function which can be of various forms such as cubic spline, or quartic spline. A quartic spline weight function can be expressed as:
+
+\[ w(r_{ij}) = \left\{
+  \begin{array}{l l l l l l}
+      1 - 6 \Big(\frac{r_{ij}}{h}\Big)^{2} + 8 \Big(\frac{r_{ij}}{h}\Big)^{3} - 3 \Big(\frac{r_{ij}}{h}\Big)^{4} & \quad  & r_{ij} \leq h \\
+    0 & \quad  & r_{ij} > h
+  \end{array} \right.\]
+\begin{equation}
+  \label{eq044}
+\end{equation}
+
+where $r_{ij} = |\textbf{x}_{i}-\textbf{x}_{j}|$. To minimize the functional $J(u)$ with respect to the set of derivatives:
+
+\begin{equation}
+    \textbf{D} = \left[ \frac{\partial u_{i}}{\partial x}, \quad  \frac{\partial u_{i}}{\partial y}, \quad  \frac{\partial u_{i}}{\partial z},  \quad \frac{\partial^{2} u_{i}}{\partial x^{2}},  \quad  \frac{\partial^{2} u_{i}}{\partial y^{2}}, \quad  \frac{\partial^{2} u_{i}}{\partial z^{2}}, \quad  \frac{\partial^{2} u_{i}}{\partial x \partial y}, \quad  \frac{\partial^{2} u_{i}}{\partial x \partial z}, \quad \frac{\partial^{2} u_{i}}{\partial y \partial z} \right]^{T}
+\end{equation}
+
+Let's define:
+\begin{equation}
+    H_{ij} = \left[ \Delta x_{ij}, \quad \Delta y_{ij}, \quad \Delta z_{ij}, \quad \frac{\Delta x_{ij}^{2}}{2}, \quad \frac{\Delta y^{2}_{ij}}{2}, \quad \frac{\Delta z^{2}_{ij}}{2}, \quad \Delta x_{ij} \Delta y_{ij}, \quad  \Delta x_{ij} \Delta z_{ij},  \quad \Delta y_{ij} \Delta z_{ij} \right]^{T}
+\end{equation}
+for all $n$ neighbouring points to central point $i$ in the kernel this becomes:
+\begin{equation*}
+\textbf{H}= 
+  \begin{bmatrix}
+      \Delta x_{i1} & \quad  & \Delta y_{i1} & \quad  & \Delta z_{i1} & \quad & ... & \quad & \Delta y_{i1} \Delta z_{i1} \\
+      \Delta x_{i2} & \quad  & \Delta y_{i2} & \quad  & \Delta z_{i2} & \quad & ... & \quad & \Delta y_{i2} \Delta z_{i2} \\
+      \Delta x_{i3} & \quad  & \Delta y_{i3} & \quad  & \Delta z_{i3} & \quad & ... & \quad & \Delta y_{i3} \Delta z_{i3} \\
+    . & \quad  & . & \quad  & . & \quad & ... & \quad & . \\
+    . & \quad  & . & \quad  & . & \quad & ... & \quad & . \\
+    . & \quad  & . & \quad  & . & \quad & ... & \quad & . \\
+      \Delta x_{in} & \quad  & \Delta y_{in} & \quad  & \Delta z_{in} & \quad & ... & \quad & \Delta y_{in} \Delta z_{in} \\
+  \end{bmatrix}
+\end{equation*}
+
+The functional can then be rewritten as:
+\begin{equation}
+    J(u) = \Big(\textbf{H} \textbf{D} + \textbf{u}_{i} - \textbf{u} \Big)^{T} \textbf{W} \Big(\textbf{H} \textbf{D} + \textbf{u}_{i} - \textbf{u} \Big)
+\end{equation}
+where
+\begin{equation}
+    \textbf{u} = \left[ u_{1}, \quad u_{2}, \quad u_{3}, \quad ... \quad u_{n} \right]^{T}
+\end{equation}
+and
+\begin{equation}
+    \textbf{u}_{i} = \left[ u_{i}, \quad u_{i}, \quad u_{i}, \quad ... \quad u_{i} \right]^{T}
+\end{equation}
+and
+\begin{equation*}
+\textbf{W}= 
+  \begin{bmatrix}
+      w_{1}^{2} & \quad  & 0 & \quad  & 0 & \quad & ... & \quad & 0 \\
+      0 & \quad  & w_{2}^{2} & \quad  & 0 & \quad & ... & \quad & 0 \\
+      0 & \quad  & 0 & \quad  & w_{3}^{2} & \quad & ... & \quad & 0 \\
+    . & \quad  & . & \quad  & . & \quad & ... & \quad & . \\
+    . & \quad  & . & \quad  & . & \quad & ... & \quad & . \\
+    . & \quad  & . & \quad  & . & \quad & ... & \quad & . \\
+      0 & \quad  & 0 & \quad  & 0 & \quad & ... & \quad & w_{n}^{2} \\
+  \end{bmatrix}
+\end{equation*}
+
+Minimizing the functional $J$ with respect to $\textbf{D}$ such that 
+\begin{equation}
+    \frac{\partial J}{\partial \textbf{D}} = 0
+\end{equation}
+results in a system of equations
+\begin{equation}
+    \textbf{A} \textbf{D} = \textbf{b}
+\end{equation}
+where
+\begin{equation}
+    \textbf{A} = \textbf{H}^{T} \textbf{W} \textbf{H}
+\end{equation}
+and 
+\begin{equation}
+    \textbf{b} =  \textbf{H}^{T} \textbf{W} (\textbf{u} - \textbf{u}_{i})
+\end{equation}
+we can then compute the derivatives of $u_{i}$ by solving for $\textbf{D}$ such that:
+\begin{equation}
+    \textbf{D} = \textbf{A}^{-1} \textbf{b}
+\end{equation}
+
+Notice that $\textbf{W}$, $\textbf{H}$ and $\textbf{A}$ are all functions of only the spatial distances between point $\textbf{x}_{i}$ and its neighbours. So for a fixed set of points, one needs to calculate them only once and then calculate the inverse matrix $\textbf{A}^{-1}$ also only once. The results are then stored in memory and reused to re-calculate $\textbf{b}$ as the field variables $u$ change from one time step to the next. A new result for $\textbf{D}$ is then obtained by multiplying the stored $\textbf{A}^{-1}$ by the newly calculated $\textbf{b}$ to determine a new approximation of the derivatives $\textbf{D}$ whose values are used to solve the PDE directly.
+
+\section{Time Stepping Schemes}
+In PntWrks3D we currently use explicit time stepping schemes. This is mainly because explicit schemes avoid the need to solve a global system of equations which is often time consuming to solve. The solution at each kernel can be done independenly from the other kernel allowing for simple parallelization. Obviously, using explicit schemes limits the size of time steps that can be used to ensure a stable solution. However, I have found that even with smaller time steps, the solver is almost always more efficient than when using implicit schemes where large systems of equations must be solved at each time step. 
+
+\vspace{5}
+In the following equations, superscript $t$ indicates the time step, $\Delta t$ is the size of the time step, $u$ is the field variable, and $f(u)$ is the PDE with respect to $u$.
+
+\subsubsection*{Explicit Forward Euler}
+\begin{equation}
+u^{t+1}=u^{t}+\Delta t f(u)^{t}
+\end{equation}
+\subsubsection*{Adam-Bashforth Order 1}
+\begin{equation}
+u^{t+1}=u^{t}+\Delta t f(u)^{t}
+\end{equation}
+\subsubsection*{Adam-Bashforth Order 2}
+\begin{equation}
+u^{t+1}=u^{t}+\Delta t \Big ( \frac{3}{2} f(u)^{t} - \frac{1}{2} f(u)^{t-1} \Big)
+\end{equation}
+\subsubsection*{Adam-Bashforth Order 3}
+\begin{equation}
+u^{t+1}=u^{t}+\Delta t \Big ( \frac{23}{12} f(u)^{t}- \frac{16}{12} f(u)^{t-1} +  \frac{5}{12} f(u)^{t-2} \Big)
+\end{equation}
+\subsubsection*{Adam-Bashforth Order 4}
+\begin{equation}
+u^{t+1}=u^{t}+\Delta t \Big ( \frac{55}{24} f(u)^{t}- \frac{59}{24} f(u)^{t-1} +  \frac{37}{24} f(u)^{t-2} - \frac{9}{24} f(u)^{t-3} \Big)
+\end{equation}
+
+\subsubsection*{Stability Criterion for Diffusion}
+\begin{equation}
+    \frac{\beta \Delta t}{(\Delta x)^{2}} + \frac{\beta \Delta t}{(\Delta y)^{2}} + \frac{\beta \Delta t}{(\Delta z)^{2}} \leq \frac{1}{2}
+\end{equation}
+
+where $\beta = \frac{k}{\rho c}$, $k$ is thermal conduction, $\rho$ is the density and $c$ is the thermal capacity
+
+\subsubsection*{CFL Condition}
+\begin{equation}
+\frac{V_{max} \Delta t}{\Delta x} \leq C_{max}
+\end{equation}
+
+\clearpage
+\section{Partial Differential Equations}
+\subsection*{The General Transport Equation}
+\begin{equation}
+\frac{\partial u}{\partial t} = \nabla \cdot (D \nabla u) - \nabla \cdot (u \textbf{V}) + R(u)
+\end{equation}
+or in linear form:
+\begin{equation}
+\frac{\partial u}{\partial t} = D \nabla^{2} u - \textbf{V} \cdot \nabla u + R
+\end{equation}
+where $u$ is the field variable, $D$ is diffusivity, $\textbf{V}$ is advective velocity, $R$ is generation/reaction term.
+
+\subsection*{The Reaction-Diffusion Equation}
+\begin{equation}
+\frac{\partial u}{\partial t} = D \nabla^{2} u + R(u) 
+\end{equation}
+
+\subsection*{The Parabolic Equation}
+\begin{equation}
+\frac{\partial u}{\partial t} = D \nabla^{2} u 
+\end{equation}
+
+\subsection*{Laplace's Equation}
+\begin{equation}
+0 = D \nabla^{2} u 
+\end{equation}
+
+\subsection*{Poisson's Equation}
+\begin{equation}
+f = D \nabla^{2} u 
+\end{equation}
+
+\subsection*{Burger's Equation}
+\begin{equation}
+    \frac{\partial u}{\partial t} = \nu \frac{\partial^{2} u}{\partial x^{2}} - u \frac{\partial u}{\partial x}  
+\end{equation}
+
+\subsection*{Inviscid Burger's Equation}
+\begin{equation}
+    \frac{\partial u}{\partial t} = - u \frac{\partial u}{\partial x}  
+\end{equation}
+
+\subsection*{The Level Set Equation}
+\begin{equation}
+\frac{\partial\Phi}{\partial t} = b \kappa \nabla^{2} \Phi - V_{n}^{ext}|\nabla \Phi | - \textbf{V} \cdot \nabla \Phi 
+\label{sharpphasefield}
+\end{equation}
+where $\Phi$ is the level set function parameter, $V_{n}^{ext}$ is the extended interface velocity, $\textbf{V}$ is advective velocity, $b$ is a diffusion constant, $\kappa$ is curvature of all level set contours.
+
+
+\subsection*{Curvature-driven flow}
+\begin{equation}
+\frac{\partial\Phi}{\partial t}  = M_{\Phi} \Big( \nabla^{2} \Phi + \frac{\Phi (1 - \Phi^{2})}{\epsilon^{2}} \Big)
+\end{equation}
+to describe the case of no curvature-driven interface motion:
+\begin{equation}
+\frac{\partial\Phi}{\partial t}  = M_{\Phi} \Big( \nabla^{2} \Phi + \frac{\Phi (1 - \Phi^{2})}{\epsilon^{2}}  - | \nabla \Phi| \nabla \cdot  \Big(\frac{\nabla \Phi}{| \nabla \Phi|} \Big) \Big)
+\end{equation}
+
+\subsection*{The Ginzburg-Landau Level Set Equation}
+\begin{equation}
+\frac{\partial\Phi}{\partial t} = \epsilon \nabla^{2} \Phi - V_{n}^{ext}|\nabla \Phi | - \textbf{V} \cdot  \nabla \Phi
+\label{eqVLS3} 
+\end{equation}
+
+\subsection*{The Reaction-Diffusion Level Set Equation}
+\begin{equation}
+\frac{\partial\Phi}{\partial t} = \epsilon_{1} \nabla^{2} \Phi - \frac{1}{\epsilon_{2}} \Big( V_{n}^{ext}|\nabla \Phi | + \textbf{V} \cdot  \nabla \Phi \Big)
+\label{phasefield2}
+\end{equation}
+
+\subsection*{The Conservative Level Set Equation}
+\begin{equation}
+\frac{\partial\Phi}{\partial t} + \textbf{V} \cdot \nabla \Phi = \gamma \nabla \cdot \Big( \epsilon \nabla \Phi - \Phi(1-\Phi) \frac{\nabla \Phi}{|\nabla \Phi|} \Big)
+\label{phasefield2}
+\end{equation}
+\begin{equation}
+\quad 0 \leq \Phi \leq 1
+\end{equation}
+
+\subsection*{The Sharp-Interface Phase Field Equation}
+\begin{equation}
+\frac{\partial\Psi}{\partial t} = \epsilon \Big(\nabla^{2} \Psi + \frac{\Psi(1-\Psi^{2})}{W^{2}} - |\nabla \Psi| \kappa \Big)- V_{n}^{ext}|\nabla \Psi | - \textbf{V} \cdot \nabla \Psi
+\label{sharpphasefield}
+\end{equation}
+
+\subsection*{The Cahn-Hilliard Equation}
+\begin{equation}
+\frac{\partial \Psi}{\partial t}  +  \textbf{V} \cdot \nabla \Psi =  D\nabla^{2}(\Psi^{3}-\Psi - \gamma \nabla^{2}\Psi)
+\end{equation}
+
+\subsection*{The Cahn-Hilliard Equation with Constant Mobility}
+\begin{equation}
+\frac{\partial \Psi}{\partial t}  +  \textbf{V} \cdot \nabla \Psi =  M\nabla^{2} \mu(\Psi)
+\end{equation}
+\begin{equation}
+\mu(\Psi) = F'(\Psi) - \epsilon \nabla^{2} \Psi
+\end{equation}
+\begin{equation}
+F'(\Psi) = \Psi(\Psi^{2}-1)
+\end{equation}
+
+\subsection*{The Cahn-Hilliard Equation with Variable Mobility}
+\begin{equation}
+\frac{\partial \Psi}{\partial t}  +  \textbf{V} \cdot \nabla \Psi =  \nabla \cdot \Big( M(\Psi) \nabla \mu(\Psi) \Big)
+\end{equation}
+\begin{equation}
+\mu(\Psi) = F'(\Psi) - \epsilon \nabla^{2} \Psi
+\end{equation}
+\begin{equation}
+F(\Psi) = 0.25(\Psi^{2}-1)^{2}, F(\Psi) = 0.25\Psi^{2}(\Psi-1)^{2}
+\end{equation}
+\begin{equation}
+F'(\Psi) = \Psi(\Psi^{2}-1)
+\end{equation}
+\begin{equation}
+M(\Psi) = 1 - \Psi^{2},  M(\Psi) = \Psi(1 - \Psi), M(\Psi) = 1
+\end{equation}
+\subsection*{The Cahn-Hilliard Equations for Spinodal Decomposition}
+\begin{equation}
+\frac{\partial \Psi}{\partial t}  +  \textbf{V} \cdot \nabla \Psi =  \nabla^{2} \Big(M  \frac{\delta F}{\delta \Psi} \Big)
+\end{equation}
+\begin{equation}
+\frac{\delta F}{\delta \Psi} = \mu(\Psi) - K \nabla^{2} \Psi
+\end{equation}
+\begin{equation}
+\mu(\Psi) = A \Big( 2 \Psi(1-\Psi)^{2}+2(\Psi)^{2}(1-\Psi)\Big)
+\end{equation}
+where $0 <= \Psi <= 1$
+\subsection*{The Allen-Cahn equation}
+\begin{equation}
+\frac{\partial \Psi}{\partial t} +  \textbf{V} \cdot \nabla \Psi = M \big( \epsilon^{2} \nabla^{2} \Psi - F'(\Psi) \big)
+\end{equation}
+where $M$ is the mobility, $F$ is the free energy density and $\Psi$ is the nonconserved order parameter.
+
+\subsection*{The Conservative Allen-Cahn equation}
+\begin{equation}
+\frac{\partial \Psi}{\partial t} +  \textbf{V} \cdot \nabla \Psi = \epsilon^{2} \nabla^{2} \Psi - F'(\Psi) + \alpha(t)
+\end{equation}
+\begin{equation}
+F'(\Psi)=\Psi(\Psi^{2}-1)
+\end{equation}
+where $\alpha(t)$ is a time dependent lagrange multipler which enforces mass conservation such that:
+\begin{equation}
+\int_{\Omega} \Psi(\textbf{x},t) d\textbf{x} = constant
+\end{equation}
+such that:
+\begin{equation}
+\alpha(t) = \frac{\int_{\Omega} F'(\Psi(\textbf{x},t)) d\textbf{x}}{\int_{\Omega} d\textbf{x}}
+\end{equation}
+
+\subsection*{The Conservative Allen-Cahn equation}
+\begin{equation}
+\frac{\partial \Psi}{\partial t} +  \textbf{V} \cdot \nabla \Psi = \epsilon^{2} \nabla^{2} \Psi - F'(\Psi) + \beta(t) k(\Psi)
+\end{equation}
+\begin{equation}
+F(\Psi) = 0.25(\Psi^{2}-1)^{2}
+\end{equation}
+\begin{equation}
+F'(\Psi) = \Psi(\Psi^{2}-1)
+\end{equation}
+\begin{equation}
+k(\Psi)= 2 \sqrt{F(\Psi)}
+\end{equation}
+\begin{equation}
+\beta(t) = \frac{\int_{\Omega} F'(\Psi(\textbf{x},t)) d\textbf{x}}{\int_{\Omega} 2 \sqrt{F(\Psi(x,t))} d\textbf{x}}
+\end{equation}
+
+\subsection*{The Allen-Cahn equations for solidification}
+\begin{equation}
+\tau \frac{\partial \Psi}{\partial t} = \frac{\partial}{\partial y} \Big( \epsilon \frac{\partial \epsilon}{\partial \theta} \frac{\partial \Psi}{ \partial x} \Big)- \frac{\partial}{\partial x} \Big( \epsilon \frac{\partial \epsilon}{\partial \theta} \frac{\partial \Psi}{ \partial y} \Big) + \nabla \cdot ( \epsilon^{2} \nabla \Psi) + \Psi (1-\Psi) \Big(\Psi-\frac{1}{2}+m(T) \Big)
+\end{equation}
+\begin{equation}
+\epsilon = \epsilon_{4} \sigma(\theta)
+\end{equation}
+\begin{equation}
+\sigma(\theta) = 1 + \delta cos(j(\theta - \theta_{0}))
+\end{equation}
+\begin{equation}
+\theta = tan^{-1} \Big( \frac{\partial \Psi / \partial y}{\partial \Psi / \partial x } \Big)
+\end{equation}
+\begin{equation}
+m(T) = \Big(\frac{\alpha}{\pi}\Big) tan^{-1}\Big( \gamma (T_{eq} - T) \Big)
+\end{equation}
+\begin{equation}
+\frac{\partial T}{\partial t} = \nabla^{2} T + L \frac{\partial \Psi}{\partial t}
+\end{equation}
+use $\tau = 0.0003$, $\epsilon_{4} = 0.01$, $\L = 1.8$, $\delta = 0.02$, $j = 4 or 6$, $\alpha = 0.9$, $T_{eq} = 1$, $\theta_{0} = 0.2$, $dx=dy=0.03$
+
+\subsection*{The Navier-Stokes Equations}
+\begin{equation}
+\frac{\partial \rho}{\partial t} = \nabla \cdot  (\rho \textbf{V})   \quad \leftarrow \textit{continuitiy equation}
+\end{equation}
+for incompressible flow:
+\begin{equation}
+0 = \nabla \cdot \textbf{V}     \quad \leftarrow \textit{continuitiy equation}
+\end{equation}
+\begin{equation}
+\frac{\partial \textbf{V}}{\partial t} = \nu \nabla^{2} \textbf{V} - \textbf{V} \cdot \nabla \textbf{V} - \frac{1}{\rho} \nabla P + \textbf{F}    \quad \leftarrow \textit{momentum equation}
+\end{equation}
+\begin{equation}
+\rho C_{p} \frac{\partial T}{\partial t} = K \nabla^{2} T - \textbf{V} \cdot  \nabla T + Q(T) \quad \leftarrow \textit{energy equation}
+\end{equation}
+\begin{equation}
+\frac{\partial C}{\partial t} = D \nabla^{2} C - \textbf{V} \cdot  \nabla C + J(C) \quad \leftarrow \textit{species transport equation}
+\end{equation}
+where $\rho$ is the material density, $t$ is time, $\textbf{V}$ is fluid velocity vector, $\mu$ is fluid viscosity, $P$ is pressure, $F$ is external forces, $T$ is temperature, $K$ is thermal conductivity, $Q$ is energy generation/absorption, $C_{p}$ is the thermal heat capacity, $C$ is the concentration of solvent or solute, $D$ is the chemical diffusivity of solvent or solute, $J$ is the chemical reactivity term.
+
+\subsection*{Dimensionless Cahn-Hilliard-Navier-Stokes Equations}
+\begin{equation}
+\nabla \cdot  \textbf{V} = 0   \quad \leftarrow \textit{continuitiy equation}
+\end{equation}
+\begin{equation}
+\frac{\partial \textbf{V}}{\partial t} + \textbf{V} \cdot \nabla \textbf{V} = - \frac{1}{\rho} \nabla p + \frac{1}{\rho Re} \nabla^{2} \textbf{V} \quad \leftarrow \textit{momentum equation}
+\end{equation}
+\begin{equation}
+\frac{\partial \Psi}{\partial t} + \nabla \cdot \left(\Psi \textbf{V} \right) = \frac{1}{Pe} \nabla^{2} \mu
+\end{equation}
+\begin{equation}
+\mu = \Psi^{3}-\Psi-\eps^{2}\nabla^{2}\Psi
+\end{equation}
+\begin{equation}
+Re = \frac{\rho_{c} u_{c} L_{c}}{\eta}
+\end{equation}
+\begin{equation}
+We = \frac{\rho_{c} L_{c} u_{c}^{2} }{\sigma}
+\end{equation}
+\begin{equation}
+Fr = \frac{u_{c}^{2} }{g L_{c}}
+\end{equation}
+\begin{equation}
+Pe = \frac{L_{c} u_{c}}{M \mu_{c}}
+\end{equation}
+
+
+\subsection*{Allen-Cahn-Navier-Stokes Equations}
+\begin{equation}
+\nabla \cdot  \textbf{V} = 0   \quad \leftarrow \textit{continuitiy equation}
+\end{equation}
+\begin{equation}
+\frac{\partial \textbf{V}}{\partial t} + \textbf{V} \cdot \nabla \textbf{V} = - \frac{1}{\rho} \nabla p + \nu \nabla^{2} \textbf{V} + \textbf{F} \quad \leftarrow \textit{momentum equation}
+\end{equation}
+\begin{equation}
+\rho C_{p} \frac{\parial T}{\partial t} + \rho C_{p} \textbf{V} \cdot \nabla T = \nabla \cdot (k \nabla T) + Q(T) \quad \leftarrow \textit{energy equation}
+\end{equation}
+\begin{equation}
+\frac{\partial \Psi}{\partial t} + \nabla \cdot \left(\Psi \textbf{V} \right) = \nabla \cdot M \Bigg( \nabla \Psi - \frac{1-4(\Psi - \Psi_{0})^{2}}{\epsilon} \textbf{n} \Bigg) \quad \leftarrow \textit{Allen-Cahn equation}
+\end{equation} 
+\begin{equation}
+\textbf{F}_{s} = \mu_{\Psi} \nabla \Psi \quad \leftarrow \textit{surface tension force}
+\end{equation}
+\begin{equation}
+\mu_{\Psi} = 1.5 \sigma [32 \Psi(\Psi-1)(\Psi-0.5)/ \epsilon - \epsilon \nabla^{2} \Psi] \quad \leftarrow \textit{chemical potential}
+\end{equation}
+\begin{equation}
+\textbf{F}_{b} = \rho \textbf{g} \quad \leftarrow \textit{body force}
+\end{equation}
+\begin{equation}
+\textbf{n} = \frac{\nabla \Psi}{| \nabla \Psi |} \quad \leftarrow \textit{normal vector}
+\end{equation}
+\begin{equation}
+\Psi(x) = \Psi_{0} \pm \frac{\Psi_{H}-\Psi_{L}}{2} tanh\Big(\frac{| \textbf{x} - \textbf{x}_0|}{0.5\epsilon}  \Big)
+\end{equation}
+if $\Psi_{H} = 1$ for the heavy fluid, $\Psi_{L} = 0$ for the light fluid and $\Psi_{0} = 0.5$ for the interface then:
+\begin{equation}
+\Psi(x) = 0.5 \Big[ 1 - tanh \Big( \frac{| \textbf{x} - \textbf{x}_0|}{0.5\epsilon} \Big) \Big]
+\end{equation}
+\begin{equation}
+At = \frac{\rho_{H} - \rho+{L}}{\rho_{H}+\rho{L}}  \quad \leftarrow \textit{Atwood number}
+\end{equation}
+\begin{equation}
+Re = \frac{\rho_{H} u_{0} L}{\mu_{H}} \quad \leftarrow \textit{Reynolds number}
+\end{equation}
+\begin{equation}
+u_{0} = \sqrt{gL}  \quad \leftarrow \textit{reference velocity scale}
+\end{equation}
+\begin{equation}
+Ca = \frac{\mu_{H} u_{0}}{\sigma}  \quad \leftarrow \textit{Cabilary number}
+\end{equation}
+\begin{equation}
+Pe = \frac{u_{0} L }{M}  \quad \leftarrow \textit{Peclet number}
+\end{equation}
+
+\subsection*{The Volume of Fluid Method for Boiling}
+\begin{equation}
+\rho = \Phi \rho_{l} + (1-\Phi) \rho_{v}
+\end{equation}
+\begin{equation}
+\frac{\partial\Phi}{\partial t} + \nabla \cdot (\Phi \textbf{V}) = - m^{\cdot} \frac{1}{\rho_{l}} 
+\label{sharpphasefield}
+\end{equation}
+where $m^{\cdot}$ is the mass transfer rate per Unit volume obtained from the phase change model and is posotive for boiling and negative for condensation.
+The interfacial mass transfer rate ($kg/m^{2} s$) is expressed as:
+\begin{equation}
+M^{\cdot} = (q_{l} + q_{v})/L
+\end{equation}
+where $q_{l}$ and $q_{v}$ are the heat fluxes ($W/m^{2}$) coming from the liquid and vapor sides of the interface. and $L$ is the latent heat of vaporization. The heat fluxes are expressed as:
+\begin{equation}
+q_{l} = \lambda_{l} \nabla T_{l} \cdot \vec{n}
+\end{equation}
+\begin{equation}
+q_{l} = -\lambda_{v} \nabla T_{v} \cdot \vec{n}
+\end{equation}
+The mass transfer rate per Unit volume ($kg/m^{3} s$) is expressed as:
+\begin{equation}
+m^{\cdot} = M^{\cdot} S_{int} / V_{cell}
+\end{equation}
+The interface sharpening equation can be expressed as
+\begin{equation}
+\frac{\partial\Phi}{\partial \tau} + \beta \nabla \cdot (\Phi (1-\Phi) \vec{n} ) = \beta \nabla \cdot (\epsilon \nabla \Phi)
+\end{equation}
+
+\subsection*{Hele-Shaw Flow Equations}
+\begin{equation}
+\nabla^{2} P = 0 \quad \quad \forall \textbf{x} \in \Omega
+\end{equation}
+\begin{equation}
+P = - \gamma \kappa \quad \quad \quad \forall \textbf{x} \in \Gamma
+\end{equation}
+\begin{equation}
+- \frac{b^{2}}{12 \mu} \frac{\partial P}{\partial n} = V_{n}  \quad \quad \forall \textbf{x} \in \Gamma
+\end{equation}
+where $b$ is the gap width, $\mu$ is the fluid viscosity
+
+\clearpage
+\subsection*{Sharp-Interface Phase Transformation in Binary Systems with Convection}
+\begin{equation}
+\frac{\partial V_{x}}{\partial t} + V_{x} \frac{\partial V_{x}}{\partial x} + V_{y} \frac{\partial V_{x}}{\partial y} + V_{z} \frac{\partial V_{x}}{\partial z} + \frac{1}{\rho} \frac{\partial p}{\partial x} = \nu \Big( \frac{\partial^{2} V_{x}}{\partial x^{2}}+\frac{\partial^{2} V_{x}}{\partial y^{2}}+\frac{\partial^{2} V_{x}}{\partial z^{2}} \Big) + \rho g_{x}
+\end{equation}
+
+\begin{equation}
+\frac{\partial V_{y}}{\partial t} + V_{x} \frac{\partial V_{y}}{\partial x} + V_{y} \frac{\partial V_{y}}{\partial y} + V_{z} \frac{\partial V_{y}}{\partial z} + \frac{1}{\rho} \frac{\partial p}{\partial y} = \nu \Big( \frac{\partial^{2} V_{y}}{\partial x^{2}}+\frac{\partial^{2} V_{y}}{\partial y^{2}}+\frac{\partial^{2} V_{y}}{\partial z^{2}} \Big) + \rho g_{y}
+\end{equation}
+
+\begin{equation}
+\frac{\partial V_{z}}{\partial t} + V_{x} \frac{\partial V_{z}}{\partial x} + V_{y} \frac{\partial V_{z}}{\partial y} + V_{z} \frac{\partial V_{z}}{\partial z} + \frac{1}{\rho} \frac{\partial p}{\partial z} = \nu \Big( \frac{\partial^{2} V_{z}}{\partial x^{2}}+\frac{\partial^{2} V_{z}}{\partial y^{2}}+\frac{\partial^{2} V_{z}}{\partial z^{2}} \Big) + \rho g_{z}
+\end{equation}
+
+\begin{equation}
+\rho C_{p} \frac{\partial T}{\partial t} + V_{x} \frac{\partial T}{\partial x} + V_{y} \frac{\partial T}{\partial y} + V_{z} \frac{T}{\partial z} = K \Big( \frac{\partial^{2} T}{\partial x^{2}}+\frac{\partial^{2} T}{\partial y^{2}}+\frac{\partial^{2} T}{\partial z^{2}} \Big) + Q(T)
+\end{equation}
+
+\begin{equation}
+\frac{\partial C}{\partial t} + V_{x} \frac{\partial C}{\partial x} + V_{y} \frac{\partial C}{\partial y} + V_{z} \frac{C}{\partial z} = D \Big( \frac{\partial^{2} C}{\partial x^{2}}+\frac{\partial^{2} C}{\partial y^{2}}+\frac{\partial^{2} C}{\partial z^{2}} \Big) + R(C)
+\end{equation}
+
+\begin{equation}
+\frac{\partial V_{x}}{\partial x} + \frac{\partial V_{y}}{\partial y}+\frac{\partial V_{z}}{\partial z} = 0
+\end{equation}
+
+\begin{equation}
+T_{i}  = T_{m} - \kappa \epsilon_{C} - V_{n} \epsilon_{V}
+\label{surf_tension1}
+\end{equation}
+
+\begin{equation}
+C_{i}  = C_{0} + \frac{T_{i} - T_{m} + \Gamma \kappa \sigma(\theta, \theta_{o})}{m_{liq}}
+\label{surf_tension1}
+\end{equation}
+
+\begin{equation}
+\kappa = \nabla  . \frac{\nabla  \Phi}{\left| \nabla  \Phi \right|}
+\end{equation}
+
+\begin{equation}
+\epsilon_{C}(\textbf{x}) = d_{o} (1 - A cos (k_{A} \theta + \theta_{o}))
+\label{surf_tension2}
+\end{equation}
+
+\begin{equation}
+\epsilon_{V}(\textbf{x}) = d_{o} (1 - A cos (k_{A} \theta + \theta_{o}))
+\end{equation}
+
+\begin{equation} \label{interface_eq}
+V_{n} = \frac{1}{L} \Bigg(K_{S} \frac{\partial T_{S}}{\partial \textbf{n}} - K_{L} \frac{\partial T_{L}}{\partial \textbf{n}} \Bigg)
+\end{equation}
+
+\begin{equation} \label{interface_eq}
+V_{n} = \frac{1}{C_{liq}-C_{sol}} \Bigg(D_{S} \frac{\partial C_{S}}{\partial \textbf{n}} - D_{L} \frac{\partial C_{L}}{\partial \textbf{n}} \Bigg)
+\end{equation}
+
+\begin{equation}
+\textbf{n}  = -\frac{\nabla  \Phi}{\left| \nabla  \Phi \right|}
+\end{equation}
+
+\begin{equation}
+\frac{\partial\Phi}{\partial t} + V_{n}^{ext}|\nabla \Phi| = 0 
+\label{sharpphasefield}
+\end{equation}
+
+\begin{equation}
+\frac{\partial f_{sol}}{\partial t} + V_{n}^{ext}|\nabla f_{sol}| = 0 
+\label{sharpphasefield}
+\end{equation}
+
+\begin{equation}
+\nabla^{2} V_{n}^{ext} = 0 ,\quad V_{n}^{ext} |_{\Gamma} = V_{n}
+\label{sharpphasefield}
+\end{equation}
+
+\begin{equation}
+C_{solidus} = k C_{liquidus}
+\end{equation}
+
+\begin{equation}
+Q(T) = - \rho L \frac{\partial f_{sol}}{\partial t}
+\end{equation}
+
+\begin{equation}
+R(C) = C(1-k)\frac{\partial f_{sol}}{\partial t}
+\end{equation}
+
+\subsection*{The Projection Method}
+\begin{equation}
+\frac{\textbf{V}^{*}-\textbf{V}^{t}}{\Delta t} = \nu \nabla^{2} \textbf{V} - \textbf{V} \cdot \nabla \textbf{V} + \textbf{F}
+\end{equation}
+\begin{equation}
+\nabla^{2} P = -\frac{\rho}{\Delta t} \Big( \nabla \cdot \textbf{V}^{*} \Big)
+\end{equation}
+\begin{equation}
+\frac{\textbf{V}^{t+1}-\textbf{V}^{*}}{\Delta t} = -\frac{1}{\rho} \nabla P
+\end{equation}
+
+\subsection*{The Artificial Compressibility Method}
+\begin{equation}
+\frac{\partial \rho}{\partial t} + \rho \Big(\frac{\partial V_{x}}{\partial x} + \frac{\partial V_{y}}{\partial y} + \frac{\partial V_{z}}{\partial z} \Big) = 0
+\end{equation}
+having relaxed the incompressibility constraint:
+\begin{equation}
+\frac{\partial \rho}{\partial P}\frac{\partial P}{\partial t} + \rho \Big(\frac{\partial V_{x}}{\partial x} + \frac{\partial V_{y}}{\partial y} + \frac{\partial V_{z}}{\partial z} \Big) = 0
+\end{equation}
+upon rearranging:
+\begin{equation}
+\frac{\partial P}{\partial t} + \rho C^{2} \Big(\frac{\partial V_{x}}{\partial x} + \frac{\partial V_{y}}{\partial y} + \frac{\partial V_{z}}{\partial z} \Big) = 0
+\end{equation}
+where 
+\begin{equation}
+\frac{1}{C^{2}} = \frac{\partial \rho}{\partial P}
+\end{equation}
+where
+\begin{equation}
+C = \beta \sqrt{max \Big((V_{x}^{2}+V_{y}^{2}+V_{z}^{2}), 0.5V_{ref}^{2} \Big)}
+\end{equation}
+
+\section*{Differential Operators}
+\begin{equation}
+grad = \nabla = \begin{bmatrix}
+       \partial/\partial x           \\[0.3em]
+       \partial/\partial y  \\[0.3em]
+       \partial/\partial z
+     \end{bmatrix}
+\end{equation}
+\begin{equation}
+grad \quad f = \nabla f = \begin{bmatrix}
+       \partial f/\partial x           \\[0.3em]
+       \partial f/\partial y  \\[0.3em]
+       \partial f/\partial z
+     \end{bmatrix}
+\end{equation}
+\begin{equation}
+div \textbf{V} = \nabla \cdot  \textbf{V} = \nabla \cdot  \begin{bmatrix}
+       u           \\[0.3em]
+       v  \\[0.3em]
+       w
+     \end{bmatrix} = \frac{\partial u}{\partial x} + \frac{\partial v}{\partial y} + \frac{\partial w}{\partial z}
+\end{equation}
+\begin{equation}
+curl \textbf{V} = \nabla \times \textbf{V} = \nabla \times \begin{bmatrix}
+       u           \\[0.3em]
+       v  \\[0.3em]
+       w
+     \end{bmatrix} = \begin{bmatrix}
+       \partial w/\partial y-\partial v/\partial z          \\[0.3em]
+       \partial u/\partial z-\partial w/\partial x  \\[0.3em]
+       \partial v/\partial x-\partial u/\partial y
+     \end{bmatrix}
+\end{equation}
+\begin{equation}
+\Delta = \nabla^{2} = \nabla \cdot \nabla =\frac{\partial }{\partial x^{2}} + \frac{\partial }{\partial y^{2}} + \frac{\partial }{\partial z^{2}}
+\end{equation}
+\begin{center}
+\line(1,0){500}
+\end{center}
+
+\section*{Differential Identities}
+\begin{equation}
+f \frac{\partial \rho}{\partial t} = \frac{\partial (f \rho)}{\partial t} - \rho \frac{\partial f}{ \partial t}
+\end{equation}
+\begin{equation}
+f \nabla \cdot  (\rho \textbf{V}) = \nabla \cdot  (f \rho \textbf{V}) - \rho \textbf{V} \cdot  \nabla f
+\end{equation}
+Normal vector:
+\begin{equation}
+\label{curvature}
+\textbf{n} = \frac{\nabla \Phi}{|\nabla \Phi|}
+\end{equation}
+Normal velocity:
+\begin{equation}
+\textbf{n} \cdot \textbf{V} = V_{n} = - \frac{1}{| \nabla \Phi |} \frac{\partial \Phi}{ \partial t}
+\end{equation}
+Curvature:
+\begin{equation}
+\label{curvature}
+\kappa = \nabla \cdot  \textbf{n} = \nabla \cdot  \frac{\nabla \Phi}{|\nabla \Phi|} = - \frac{1}{| \nabla \Phi|} \Big( \nabla^{2} \Phi - \frac{(\nabla \Phi \nabla) | \nabla \Phi|}{| \nabla \Phi|} \Big)
+\end{equation}
+\begin{equation}
+\label{curvature}
+\kappa = \frac{1}{| \nabla \Phi|} \Big( \nabla^{2} \Phi + \frac{\Phi (1 - \Phi^{2})}{\epsilon^{2}} \Big)
+\end{equation}
+\begin{center}
+\line(1,0){500}
+\end{center}
+
+\section{Running PntWrks3D}
+To run FPM3D first you'll need a Unix-like operating system. The code has been tested on Debian and FreeBSD but technically any Unix-like operating system that has bash and gfortran should be able to compile the code. 
+
+\subsection{Running on Debian}
+
+\subsection{Running on FreeBSD}
+\bibliography{references}
+\end{document}
+
+
+

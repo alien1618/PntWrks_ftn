@@ -72,6 +72,7 @@ subroutine slv_stfn(ps, sp, mat, bcs, u, phi, vel0)
     use krnl_mls
     use krnl_wls
     use krnl_krg
+    use slvr_cmn
     use bndry
     use trnsprt
     use ns
@@ -89,10 +90,7 @@ subroutine slv_stfn(ps, sp, mat, bcs, u, phi, vel0)
     type (kernel), dimension(:), allocatable :: ikrnls
     integer                                 :: c = 1, t
     real(8), dimension(ps%totpnts)          :: vf, u, vf_old, q
-    real(8)                                 :: start, finish, delta_ratio, d_nrm, eps
-    integer, dimension(:), allocatable      :: pntbins
-    integer                                 :: nx, nxy, totbins
-    type(kernel), dimension(:), allocatable :: bins
+    real(8)                                 :: delta_ratio, d_nrm, eps
     character(len=50)                       :: phi_fname = 'phi', u_fname = 'u'
     character(len=50)                        :: v_fname = 'v', p_fname = 'p', vn_fname = 'vn'
     !1character(len=50)                        :: ip_fname = 'ip', sol_fname = 'sol', liq_fname = 'liq'
@@ -154,29 +152,8 @@ subroutine slv_stfn(ps, sp, mat, bcs, u, phi, vel0)
     end if
     vel = vel0
 !------------------------------------------------------------------------------------------
-    ! Calculate bounds of neighbour search bins
-    nx = 30
-    call gen_bins(ps%pnts, ps%totpnts, ps%dim, ps%dx, nx, nxy, totbins, bins, pntbins)
-!------------------------------------------------------------------------------------------
     write(*,'(a)') "Constructing krnls at fixed points..."
-    call cpu_time(start)
-    !call get_nbrs_bf(sp%h, ps%pnts, ps%totpnts, ps%pnts, ps%totpnts, krnls)
-    call get_nbrs_bg(ps%pnts, pntbins, ps%totpnts, bins, nx, nxy, totbins, ps%dim, sp%h, krnls)
-    select case(sp%krnl)
-        case (1)
-            call get_rbf_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, sp%rbf_polyex, krnls)
-        case (2)
-            call get_mls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%mls, sp%order, sp%h, krnls)
-        case (3)
-            call get_wls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%wls, sp%order, sp%h, krnls)
-        case (4)
-            call get_sph_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%sph, ps%dim, sp%h,  krnls)
-        case (5)
-            call get_krg_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, krnls)
-    end select
-    call get_intrps_o2(ps%pnts, ps%totpnts, krnls)
-    call cpu_time(finish)
-    print '("intrpolants construction time = ",f10.1," seconds")',finish-start
+    call get_krnls(ps, sp, krnls)
 !------------------------------------------------------------------------------------------
     if (sp%vtk .eqv. .true.) then
         call prnt_vtk(u, ps, u_fname, 0)
@@ -203,7 +180,7 @@ subroutine slv_stfn(ps, sp, mat, bcs, u, phi, vel0)
 
        !generate interface points at the zero-isocontour of phi
        call get_intrf_pnts(ps%pnts, phi, krnls,  ps%totpnts, ps%dx, ip, totip)
-       write(*,*) "total interface points generated = ", totip
+       write(*,'(a,i0)') "Total interface points generated = ", totip
 
        allocate(vn(totip))
        allocate(ikrnls(totip))

@@ -19,7 +19,7 @@ subroutine  run_trnsprt()
 !------------------------------------------------------------------------------------------
     real(8), dimension(:), allocatable      :: k         !diffusivity for 2 phases
     real(8), dimension(:), allocatable      :: q         !generation trm
-    real(8), dimension(:), allocatable      :: u     !field variable distribution
+    real(8), dimension(:), allocatable      :: u         !field variable distribution
     real(8), dimension(:,:), allocatable    :: v         !advective velocity in xyz
     real(8), dimension(:), allocatable      :: phi       !volume of fluid distribution (0,1)
     type(pointset)                          :: ps        !point set data structure
@@ -61,14 +61,8 @@ subroutine  slv_trnsprt(ps, bcs, sp, d, u, vof, vel, q)
     use krnl_struct
     use bc_struct
     use slvr_prmtrs_struct
+    use slvr_cmn
     use pntst
-    use krnl_cmn
-    use krnl_sph
-    use krnl_rbf
-    use krnl_mls
-    use krnl_wls
-    use krnl_krg
-    use krnl_gfd
     use bndry
     use trnsprt
 !------------------------------------------------------------------------------------------
@@ -85,39 +79,11 @@ subroutine  slv_trnsprt(ps, bcs, sp, d, u, vof, vel, q)
     character(len=50)                          :: fname = 'u'
     integer                                    :: c = 1, t
     real(8), dimension(ps%totpnts)             :: rhs
-    real(8)                                    :: start, finish
 !------------------------------------------------------------------------------------------
     rhs(:) = 0.0d0
 !------------------------------------------------------------------------------------------
-    ! Calculate bounds of neighbour search bins
-    !nx = 30
-    !call gen_bins(ps%pnts, ps%totpnts, ps%dim, ps%dx, nx, nxy, totbins, bins, pntbins)
-    !allocate(krnls(ps%totpnts))
-!------------------------------------------------------------------------------------------
     write(*,'(a)') "Constructing krnls..."
-    call cpu_time(start)
-    call get_nbrs_bf(sp%h, ps%pnts, ps%totpnts, ps%pnts, ps%totpnts, krnls)
-    
-    !call get_nbrs_sp(sp%h, vof, ps%pnts, ps%totpnts, krnls) !be careful, it causes errors for advection-diffusion case.
-    select case(sp%krnl)
-        case (1)
-            call get_rbf_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, sp%rbf_polyex, krnls)
-        case (2)
-            call get_mls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%mls, sp%order, sp%h, krnls)
-        case (3)
-            call get_wls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%wls, sp%order, sp%h, krnls)
-        case (4)
-            call get_sph_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%sph, ps%dim, sp%h,  krnls)
-        case (5)
-            call get_krg_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, krnls)
-        case (6)
-            call get_gfd_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%gfd, sp%h,  krnls)
-    end select
-    if (sp%krnl < 6) then
-        call get_intrps_o2(ps%pnts, ps%totpnts, krnls)
-    end if
-    call cpu_time(finish)
-    print '("Intrpolants construction time = ",f10.1," seconds")',finish-start
+    call get_krnls(ps, sp, krnls)
 !---------------------------------------------------------------------------------------
     write(*,'(a)') "Computing transient solution..."
     call set_var(u, bcs)

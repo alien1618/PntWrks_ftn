@@ -50,13 +50,7 @@ subroutine  slv_elst(ps, mat, bcs, sp)
     use bc_struct
     use slvr_prmtrs_struct
     use pntst
-    use krnl_cmn
-    use krnl_sph
-    use krnl_rbf
-    use krnl_mls
-    use krnl_wls
-    use krnl_krg
-    use krnl_gfd
+    use slvr_cmn
     use bndry
     use trnsprt
     use prmtrs
@@ -75,7 +69,7 @@ subroutine  slv_elst(ps, mat, bcs, sp)
     integer                                    :: c = 1, i, j, t, nbr
     real(8), dimension(ps%totpnts, 3)          :: vel, vel_new
     real(8), dimension(ps%totpnts)             :: v, vms
-    real(8)                                    :: eps = 1.0e-06, t1, t2, start, finish
+    real(8)                                    :: eps = 1.0e-06, t1, t2
     real(8)                                    :: dvxdx, dvxdy, dvxdz, dvydx, dvydy, dvydz, dvzdx, dvzdy, dvzdz
     real(8)                                    :: a_pressure_x, a_pressure_y, a_pressure_z
     real(8)                                    :: art_visc_x, art_visc_y, art_visc_z
@@ -130,28 +124,8 @@ subroutine  slv_elst(ps, mat, bcs, sp)
     s_yz(:) = 0.0
 !------------------------------------------------------------------------------------------
     write(*,'(a)') "Constructing krnls..."
-    call cpu_time(start)
     allocate(krnls(ps%totpnts))
-    call get_nbrs_bf(sp%h, ps%pnts, ps%totpnts, ps%pnts, ps%totpnts, krnls)
-    select case(sp%krnl)
-        case (1)
-            call get_rbf_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, sp%rbf_polyex, krnls)
-        case (2)
-            call get_mls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%mls, sp%order, sp%h, krnls)
-        case (3)
-            call get_wls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%wls, sp%order, sp%h, krnls)
-        case (4)
-            call get_sph_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%sph, ps%dim, sp%h,  krnls)
-        case (5)
-            call get_krg_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, krnls)
-        case (6)
-            call get_gfd_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%gfd, sp%h,  krnls)
-    end select
-    if (sp%krnl < 6) then
-        call get_intrps_o2(ps%pnts, ps%totpnts, krnls)
-    end if
-    call cpu_time(finish)
-    print '("intrpolants construction time = ",f10.1," seconds")',finish-start
+    call get_krnls(ps, sp, krnls)
 !------------------------------------------------------------------------------------------
     do i = 1, ps%totpnts
         conc(i) = 0

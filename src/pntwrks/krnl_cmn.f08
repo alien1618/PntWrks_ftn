@@ -204,7 +204,6 @@ subroutine get_intrps_o2(pnts, totpnts, krnls)
     !$omp end parallel do
 end subroutine get_intrps_o2
 
-
 subroutine get_intrps_o22(ip, totip, pnts, krnls)
 !----------------------------------------------------------------------
 ! Compute laplacian using first order interpolants

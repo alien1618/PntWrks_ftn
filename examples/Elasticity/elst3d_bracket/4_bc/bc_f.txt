@@ -1,0 +1,13 @@
+6
+
+1   fixed.txt	0.0
+
+2   fixed.txt	0.0
+
+3   fixed.txt	0.0
+
+4   load.txt	0.0
+
+5   load.txt	20.0
+
+6   load.txt	0.0

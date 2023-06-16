@@ -1,0 +1,18 @@
+-1.0    x-base point
+
+-1.0    y-base point
+
+-1.0    z-base point
+
+2.0   x-length
+
+2.0   y-length
+
+2.0   z-length
+
+30    x-discritization
+
+30    y-discritization
+
+30      z-discritization
+

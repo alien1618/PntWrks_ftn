@@ -5,7 +5,7 @@ contains
 subroutine run_ls()
 !------------------------------------------------------------------------------------------
 ! This subroutine solves the level-set, allen-cahn, cahn-hilliard equations
-! for diffuse-interface propagation under a pre-determined field velocity. 
+! for diffuse-interface propagation under a pre-determined velocity field. 
 ! Solution is obtained using local strong-form meshfree methods and iterative 
 ! explicit time stepping schemes and 
 !------------------------------------------------------------------------------------------
@@ -13,6 +13,7 @@ subroutine run_ls()
     use slvr_prmtrs_struct
     use prmtrs
     use pntst
+    use slvr_cmn
     use omp_lib
 !------------------------------------------------------------------------------------------
     real(8),dimension(:),allocatable        ::  phi      !level set function distribution
@@ -51,13 +52,7 @@ subroutine slv_ls(ps, sp, phi, vel, vn)
     use krnl_struct
     use pntst_struct
     use slvr_prmtrs_struct
-    use krnl_cmn
-    use krnl_sph
-    use krnl_wls
-    use krnl_rbf
-    use krnl_mls
-    use krnl_krg
-    use krnl_gfd
+    use slvr_cmn
     use intrf
     use pntst
     use bndry
@@ -73,43 +68,14 @@ subroutine slv_ls(ps, sp, phi, vel, vn)
     integer                                 ::  i, c = 1, t
     real(8), dimension(:), allocatable ::  curv
     character(len=50)                       ::  fname = 'phi'
-    real(8)                                 ::  start, finish
     real(8)                                 ::  w, m, mobility = 1, vol0, vol
-    integer, dimension(:), allocatable      :: pntbins
-    integer                                 :: nx, nxy, totbins
-    type(kernel), dimension(:), allocatable :: bins
 !------------------------------------------------------------------------------------------
     vol0 = sum(phi)
     w = ps%dx
     m = mobility*w*w
 !------------------------------------------------------------------------------------------
-! Calculate bounds of neighbour search bins
-    nx = 30
-    call gen_bins(ps%pnts, ps%totpnts, ps%dim, ps%dx, nx, nxy, totbins, bins, pntbins)
-!------------------------------------------------------------------------------------------
     write(*,'(a)') "Constructing krnls..."
-    call cpu_time(start)
-    !call get_nbrs_bf(sp%h, ps%pnts, ps%totpnts, ps%pnts, ps%totpnts, krnls)
-    call get_nbrs_bg(ps%pnts, pntbins, ps%totpnts, bins, nx, nxy, totbins, ps%dim, sp%h, krnls)
-    select case(sp%krnl)
-        case (1)
-            call get_rbf_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, sp%rbf_polyex, krnls)
-        case (2)
-            call get_mls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%mls, sp%order, sp%h, krnls)
-        case (3)
-            call get_wls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%wls, sp%order, sp%h, krnls)
-        case (4)
-            call get_sph_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%sph, ps%dim, sp%h,  krnls)
-        case (5)
-            call get_krg_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, krnls)
-        case (6)
-            call get_gfd_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%gfd, sp%h, krnls)
-    end select
-    if (sp%krnl < 6) then
-        call get_intrps_o2(ps%pnts, ps%totpnts, krnls)
-    end if
-    call cpu_time(finish)
-    print '("intrpolants construction time = ",f10.1," seconds")',finish-start
+    call get_krnls(ps, sp, krnls)
 !------------------------------------------------------------------------------------------
     write(*,'(a)') "Computing transient solution..."
     if (sp%vtk .eqv. .true.) then

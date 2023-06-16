@@ -1,0 +1,4 @@
+0.01     thermal conductivity in phase 1
+
+0.01    thermal conductiity in phase 2
+

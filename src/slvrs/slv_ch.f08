@@ -44,16 +44,10 @@ end subroutine run_ch
 
 subroutine slv_ch(ps, sp, phi, vel, vn)
 !------------------------------------------------------------------------------------------  
+    use pntst_struct
     use krnl_struct
     use slvr_prmtrs_struct
-    use pntst_struct
-    use krnl_cmn
-    use krnl_sph
-    use krnl_rbf
-    use krnl_mls
-    use krnl_wls
-    use krnl_krg
-    use krnl_gfd
+    use slvr_cmn
     use intrf
     use pntst
     use bndry
@@ -67,39 +61,10 @@ subroutine slv_ch(ps, sp, phi, vel, vn)
 !------------------------------------------------------------------------------------------  
     type (kernel), dimension(ps%totpnts)    :: krnls
     integer                                 :: c = 1, t, i
-    real(8)                                 :: start, finish
-    integer, dimension(:), allocatable      :: pntbins
-    integer                                 :: nx, nxy, totbins
-    type(kernel), dimension(:), allocatable :: bins
     character(len=50)                       :: fname = 'phi'
-!------------------------------------------------------------------------------------------
-! Calculate bounds of neighbour search bins
-    nx = 30
-    call gen_bins(ps%pnts, ps%totpnts, ps%dim, ps%dx, nx, nxy, totbins, bins, pntbins)
-!------------------------------------------------------------------------------------------    
+!------------------------------------------------------------------------------------------ 
     write(*,'(a)') "Constructing krnls..."
-    call cpu_time(start)
-    !call get_nbrs_bf(sp%h, ps%pnts, ps%totpnts, ps%pnts, ps%totpnts, krnls)
-    call get_nbrs_bg(ps%pnts, pntbins, ps%totpnts, bins, nx, nxy, totbins, ps%dim, sp%h, krnls)
-    select case(sp%krnl)
-        case (1)
-            call get_rbf_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, sp%rbf_polyex, krnls)
-        case (2)
-            call get_mls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%mls, sp%order, sp%h, krnls)
-        case (3)
-            call get_wls_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%wls, sp%order, sp%h, krnls)
-        case(4)
-            call get_sph_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%sph, ps%dim, sp%h,  krnls)
-        case (5)
-            call get_krg_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%rbf, sp%order, sp%h, sp%rbf_alpha, krnls)
-        case (6)
-            call get_gfd_krnls(ps%pnts, ps%totpnts, ps%pnts, sp%gfd, sp%h, krnls)
-    end select
-    if (sp%krnl < 6) then
-        call get_intrps_o2(ps%pnts, ps%totpnts, krnls)
-    end if
-    call cpu_time(finish)
-    print '("intrpolants construction time = ",f10.1," seconds")',finish-start
+    call get_krnls(ps, sp, krnls)
 !------------------------------------------------------------------------------------------
     write(*,'(a)') "Computing transient solution..."
     if (sp%vtk .eqv. .true.) then
